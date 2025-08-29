@@ -1,0 +1,14 @@
+spring:
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/share_note
+    username: postgres
+    password: 1234
+  flyway:
+    enabled: true
+    url: jdbc:postgresql://localhost:5432/share_note
+    user: postgres
+    password: 1234
+
+jwt:
+  secret: U29tZUJhc2U2NEVuY29kZWRSYW5kb21LZXlGb3JKV1Q=
+  expiration: 720
