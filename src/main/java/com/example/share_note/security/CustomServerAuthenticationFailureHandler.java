@@ -27,8 +27,6 @@ public class CustomServerAuthenticationFailureHandler implements ServerAuthentic
 
     @Override
     public Mono<Void> onAuthenticationFailure(WebFilterExchange webFilterExchange, AuthenticationException exception) {
-        log.error("Authentication failed: {}", exception.getMessage());
-
         ServerWebExchange exchange = webFilterExchange.getExchange();
 
         ErrorCode errorCode;

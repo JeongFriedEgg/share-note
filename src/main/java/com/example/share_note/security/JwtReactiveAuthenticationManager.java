@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class JwtReactiveAuthenticationManager implements ReactiveAuthenticationManager {
 
-    private final JwtTokenProvider jwtTokenProvider;
     private final CustomReactiveUserDetailsService customReactiveUserDetailsService;
 
     /**
