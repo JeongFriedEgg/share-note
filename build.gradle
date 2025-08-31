@@ -34,6 +34,7 @@ dependencies {
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.7'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.7'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.7'
+	implementation("nl.basjes.parse.useragent:yauaa:7.31.0")
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
 	runtimeOnly 'org.postgresql:r2dbc-postgresql'

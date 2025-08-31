@@ -5,10 +5,12 @@ import com.example.share_note.dto.user.LoginRequestDto;
 import com.example.share_note.dto.user.LoginResponseDto;
 import com.example.share_note.dto.user.RegisterRequestDto;
 import com.example.share_note.dto.user.RegisterResponseDto;
+import com.example.share_note.entity.RefreshToken;
 import com.example.share_note.entity.UserEntity;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.user.UserLoginException;
 import com.example.share_note.exception.user.UserRegistrationException;
+import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
 import com.example.share_note.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -27,25 +29,26 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserService {
     private final ReactiveUserRepository reactiveUserRepository;
+    private final ReactiveRefreshTokenRepository reactiveRefreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
-    public Mono<RegisterResponseDto> register(RegisterRequestDto requestDto) {
-        return reactiveUserRepository.findByUsernameOrEmail(requestDto.getUsername(),requestDto.getEmail())
+    public Mono<RegisterResponseDto> register(RegisterRequestDto request) {
+        return reactiveUserRepository.findByUsernameOrEmail(request.getUsername(),request.getEmail())
                 .flatMap(existingUser -> {
-                    if (existingUser.getUsername().equals(requestDto.getUsername())) {
+                    if (existingUser.getUsername().equals(request.getUsername())) {
                         return Mono.error(new UserRegistrationException(ErrorCode.DUPLICATE_USERNAME));
                     }
-                    if (existingUser.getEmail().equals(requestDto.getEmail())) {
+                    if (existingUser.getEmail().equals(request.getEmail())) {
                         return Mono.error(new UserRegistrationException(ErrorCode.DUPLICATE_EMAIL));
                     }
                     return null;
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     UserEntity user = UserEntity.builder()
-                            .username(requestDto.getUsername())
-                            .password(passwordEncoder.encode(requestDto.getPassword()))
-                            .email(requestDto.getEmail())
+                            .username(request.getUsername())
+                            .password(passwordEncoder.encode(request.getPassword()))
+                            .email(request.getEmail())
                             .authorities("ROLE_USER")
                             .createdAt(LocalDateTime.now())
                             .build();
@@ -60,26 +63,50 @@ public class UserService {
                 .cast(RegisterResponseDto.class);
     }
 
-    public Mono<LoginResponseDto> loginAndGenerateToken(LoginRequestDto requestDto) {
-        return reactiveUserRepository.findByUsername(requestDto.getUsername())
-                .switchIfEmpty(Mono.error(new UserLoginException(ErrorCode.USER_NOT_FOUND)))
-                .flatMap(user -> {
-                    if (passwordEncoder.matches(requestDto.getPassword(), user.getPassword())) {
-                        List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getAuthorities()));
-                        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                                new CustomUserDetails(user.getUsername(),user.getPassword(),user.getAuthorities(),user.getEmail()),
-                                null,
-                                authorities
-                        );
+    public Mono<LoginResponseDto> loginAndGenerateToken(LoginRequestDto request) {
+        return Mono.deferContextual(ctx -> {
+            String clientIp = ctx.get("clientIp");
+            String deviceName = ctx.get("deviceName");
+            String osName = ctx.get("osName");
+            String browserName = ctx.get("browserName");
 
-                        String accessToken = jwtTokenProvider.createToken(authentication);
+            return reactiveUserRepository.findByUsername(request.getUsername())
+                    .switchIfEmpty(Mono.error(new UserLoginException(ErrorCode.USER_NOT_FOUND)))
+                    .flatMap(user -> {
+                        if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+                            List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getAuthorities()));
+                            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                                    new CustomUserDetails(user.getUsername(), user.getPassword(), user.getAuthorities(), user.getEmail()),
+                                    null,
+                                    authorities
+                            );
 
-                        return Mono.just(LoginResponseDto.builder()
-                                .accessToken(accessToken)
-                                .build());
-                    }else {
-                        return Mono.error(new UserLoginException(ErrorCode.INVALID_PASSWORD));
-                    }
-                });
+                            String accessToken = jwtTokenProvider.createAccessToken(authentication);
+                            String refreshToken = jwtTokenProvider.createRefreshToken(authentication);
+
+                            RefreshToken refreshTokenEntity = RefreshToken.builder()
+                                    .refreshToken(refreshToken)
+                                    .username(user.getUsername())
+                                    .expirationDate(LocalDateTime.now().plusHours(720))
+                                    .ipAddress(clientIp)
+                                    .deviceName(deviceName)
+                                    .osName(osName)
+                                    .browserName(browserName)
+                                    .build();
+
+                            return reactiveRefreshTokenRepository.save(refreshTokenEntity)
+                                    .thenReturn(LoginResponseDto.builder()
+                                            .accessToken(accessToken)
+                                            .refreshToken(refreshToken)
+                                            .build());
+                        } else {
+                            return Mono.error(new UserLoginException(ErrorCode.INVALID_PASSWORD));
+                        }
+                    });
+        });
+    }
+
+    public Mono<Void> logout(String refreshToken) {
+        return reactiveRefreshTokenRepository.deleteByRefreshToken(refreshToken);
     }
 }

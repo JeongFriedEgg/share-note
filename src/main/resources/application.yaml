@@ -11,4 +11,7 @@ spring:
 
 jwt:
   secret: U29tZUJhc2U2NEVuY29kZWRSYW5kb21LZXlGb3JKV1Q=
-  expiration: 720
+  access-token:
+    expiration: 30 # 30분(분단위)
+  refresh-token:
+    expiration: 1440 # 한달(분단위)

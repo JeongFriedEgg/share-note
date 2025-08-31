@@ -25,14 +25,25 @@ public class JwtTokenProvider {
 
 
     private final SecretKey secretKey;
-    private final Duration expirationDuration;
+    private final long accessTokenExpiration;
+    private final long refreshTokenExpiration;
 
 
     public JwtTokenProvider(@Value("${jwt.secret}") String key,
-                            @Value("${jwt.expiration}") Long expirationDuration) {
+                            @Value("${jwt.access-token.expiration}") long accessTokenExpiration,
+                            @Value("${jwt.refresh-token.expiration}") long refreshTokenExpiration) {
         byte[] bytes = Decoders.BASE64.decode(key);
         this.secretKey = Keys.hmacShaKeyFor(bytes);
-        this.expirationDuration = Duration.ofHours(expirationDuration);
+        this.accessTokenExpiration = accessTokenExpiration;
+        this.refreshTokenExpiration = refreshTokenExpiration;
+    }
+
+    public String createAccessToken(Authentication authentication) {
+        return createToken(authentication, accessTokenExpiration);
+    }
+
+    public String createRefreshToken(Authentication authentication) {
+        return createToken(authentication, refreshTokenExpiration);
     }
 
     /**
@@ -41,7 +52,7 @@ public class JwtTokenProvider {
      * @param authentication 현재 인증된 사용자의 정보
      * @return 생성된 토큰 정보(TokenInfoDto
      */
-    public String createToken(Authentication authentication) {
+    private String createToken(Authentication authentication, long expirationHours) {
         String authorities = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.joining(","));
@@ -51,7 +62,7 @@ public class JwtTokenProvider {
         String email = userDetails.getEmail();
 
         Instant now = Instant.now();
-        Instant expirationInstant = now.plus(expirationDuration);
+        Instant expirationInstant = now.plus(Duration.ofMinutes(expirationHours));
         Date expirationDate = Date.from(expirationInstant);
 
         return Jwts.builder()
