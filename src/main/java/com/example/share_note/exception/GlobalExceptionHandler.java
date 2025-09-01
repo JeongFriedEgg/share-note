@@ -16,7 +16,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UserRegistrationException.class)
     public ResponseEntity<ErrorResponseDto> handleUserRegistrationException(UserRegistrationException ex) {
         ErrorCode errorCode = ex.getErrorCode();
-        HttpStatus httpStatus = HttpStatus.BAD_REQUEST;
+        HttpStatus httpStatus = HttpStatus.CONFLICT;
 
         ErrorResponseDto errorResponse = ErrorResponseDto.builder()
                 .message(errorCode.getMessage())
