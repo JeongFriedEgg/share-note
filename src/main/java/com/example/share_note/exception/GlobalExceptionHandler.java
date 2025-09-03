@@ -57,4 +57,27 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(errorResponse, httpStatus);
     }
+
+    @ExceptionHandler(WorkspaceException.class)
+    public ResponseEntity<ErrorResponseDto> handleWorkspaceException(WorkspaceException ex) {
+        ErrorCode errorCode = ex.getErrorCode();
+        HttpStatus httpStatus;
+
+        if (errorCode == ErrorCode.WORKSPACE_NOT_FOUND) {
+            httpStatus = HttpStatus.NOT_FOUND;
+        } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
+            httpStatus = HttpStatus.FORBIDDEN;
+        } else {
+            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        ErrorResponseDto errorResponse = ErrorResponseDto.builder()
+                .message(errorCode.getMessage())
+                .status(httpStatus)
+                .code(errorCode.getCode())
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        return new ResponseEntity<>(errorResponse, httpStatus);
+    }
 }
