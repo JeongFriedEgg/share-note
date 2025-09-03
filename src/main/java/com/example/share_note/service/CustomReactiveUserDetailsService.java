@@ -20,6 +20,7 @@ public class CustomReactiveUserDetailsService implements ReactiveUserDetailsServ
                 .switchIfEmpty(Mono.error(new UsernameNotFoundException("User not found: "+username)))
                 .map(user ->
                         new CustomUserDetails(
+                                user.getId(),
                                 user.getUsername(),
                                 user.getPassword(),
                                 user.getAuthorities(),

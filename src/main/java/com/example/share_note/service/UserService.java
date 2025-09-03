@@ -76,7 +76,7 @@ public class UserService {
                         if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                             List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getAuthorities()));
                             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                                    new CustomUserDetails(user.getUsername(), user.getPassword(), user.getAuthorities(), user.getEmail()),
+                                    new CustomUserDetails(user.getId(), user.getUsername(), user.getPassword(), user.getAuthorities(), user.getEmail()),
                                     null,
                                     authorities
                             );

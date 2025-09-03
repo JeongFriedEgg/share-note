@@ -8,13 +8,17 @@ import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.Date;
 import java.util.stream.Collectors;
 
@@ -58,6 +62,7 @@ public class JwtTokenProvider {
                 .collect(Collectors.joining(","));
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Long userId = userDetails.getId();
         String username = userDetails.getUsername();
         String email = userDetails.getEmail();
 
@@ -67,6 +72,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(authentication.getName())
+                .claim("userId", userId)
                 .claim("username", username)
                 .claim("email", email)
                 .claim("authorities", authorities)
@@ -101,5 +107,27 @@ public class JwtTokenProvider {
             log.error("Invalid JWT token: {}", e.getMessage());
             throw new JwtAuthenticationException(ErrorCode.INVALID_TOKEN);
         }
+    }
+
+    public Authentication getAuthentication(String token) {
+        Claims claims = getClaims(token);
+        Long userId = claims.get("userId", Long.class);
+        String username = claims.get("username", String.class);
+        String email = claims.get("email", String.class);
+
+        Collection<? extends GrantedAuthority> authorities =
+                Arrays.stream(claims.get("authorities", String.class).split(","))
+                        .map(SimpleGrantedAuthority::new)
+                        .toList();
+
+        CustomUserDetails userDetails = new CustomUserDetails(
+                userId,
+                username,
+                null,
+                authorities.stream().map(GrantedAuthority::getAuthority).collect(Collectors.joining(",")),
+                email
+        );
+
+        return new UsernamePasswordAuthenticationToken(userDetails, null, authorities);
     }
 }
