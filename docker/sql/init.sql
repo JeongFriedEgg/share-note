@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS refresh_token (
 );
 
 -- 워크스페이스 테이블
-CREATE TABLE workspaces (
+CREATE TABLE IF NOT EXISTS workspaces (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -34,7 +34,7 @@ CREATE TABLE workspaces (
 );
 
 -- 워크스페이스 멤버십 테이블
-CREATE TABLE workspace_members (
+CREATE TABLE IF NOT EXISTS workspace_members (
     id BIGSERIAL PRIMARY KEY,
     workspace_id BIGINT REFERENCES workspaces(id) ON DELETE CASCADE,
     user_id BIGINT REFERENCES "users"(id) ON DELETE CASCADE,
@@ -44,10 +44,10 @@ CREATE TABLE workspace_members (
 );
 
 -- 페이지 테이블
-CREATE TABLE pages (
+CREATE TABLE IF NOT EXISTS pages (
     id BIGSERIAL PRIMARY KEY,
-    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
-    parent_page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    workspace_id BIGINT REFERENCES workspaces(id) ON DELETE CASCADE,
+    parent_page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     icon JSONB,
     cover JSONB,
@@ -59,11 +59,10 @@ CREATE TABLE pages (
     updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by BIGINT REFERENCES "users"(id) ON DELETE SET NULL,
     last_edited_by BIGINT REFERENCES "users"(id) ON DELETE SET NULL,
-    last_edited_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 페이지 권한 테이블
-CREATE TABLE page_permissions (
+CREATE TABLE IF NOT EXISTS page_permissions (
     id BIGSERIAL PRIMARY KEY,
     page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
     user_id BIGINT REFERENCES "users"(id) ON DELETE CASCADE,
@@ -74,10 +73,10 @@ CREATE TABLE page_permissions (
 );
 
 -- 블록 테이블
-CREATE TABLE blocks (
+CREATE TABLE IF NOT EXISTS blocks (
     id BIGSERIAL PRIMARY KEY,
     page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
-		parent_block_id BIGINT REFERENCES blocks(id) ON DELETE CASCADE,
+    parent_block_id BIGINT REFERENCES blocks(id) ON DELETE CASCADE,
     type VARCHAR(50) NOT NULL, -- paragraph, heading_1, heading_2, bulleted_list_item, etc.
     content JSONB NOT NULL, -- 블록별 고유한 콘텐츠
     position INTEGER NOT NULL, -- 같은 부모 내에서의 순서
