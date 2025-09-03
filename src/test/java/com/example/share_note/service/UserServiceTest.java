@@ -4,8 +4,8 @@ import com.example.share_note.dto.user.LoginRequestDto;
 import com.example.share_note.dto.user.LoginResponseDto;
 import com.example.share_note.dto.user.RegisterRequestDto;
 import com.example.share_note.dto.user.RegisterResponseDto;
-import com.example.share_note.entity.RefreshToken;
-import com.example.share_note.entity.UserEntity;
+import com.example.share_note.domain.RefreshToken;
+import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.user.UserLoginException;
 import com.example.share_note.exception.user.UserRegistrationException;
@@ -52,14 +52,14 @@ public class UserServiceTest {
     @InjectMocks
     private UserService userService;
 
-    private UserEntity userEntity;
+    private User user;
 
     @Captor
     ArgumentCaptor<RefreshToken> refreshTokenCaptor;
 
     @BeforeEach
     void setUp() {
-        userEntity = UserEntity.builder()
+        user = User.builder()
                 .id(1L)
                 .username("testuser")
                 .password("testpassword")
@@ -83,8 +83,8 @@ public class UserServiceTest {
                 .thenReturn(Mono.empty());
         when(passwordEncoder.encode(anyString()))
                 .thenReturn("testpassword");
-        when(reactiveUserRepository.save(any(UserEntity.class)))
-                .thenReturn(Mono.just(userEntity));
+        when(reactiveUserRepository.save(any(User.class)))
+                .thenReturn(Mono.just(user));
 
         // when
         Mono<RegisterResponseDto> responseDtoMono = userService.register(requestDto);
@@ -109,7 +109,7 @@ public class UserServiceTest {
                 .build();
 
         when(reactiveUserRepository.findByUsernameOrEmail(anyString(), anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
 
         // when
         Mono<RegisterResponseDto> responseDtoMono = userService.register(requestDto);
@@ -133,7 +133,7 @@ public class UserServiceTest {
                 .build();
 
         when(reactiveUserRepository.findByUsernameOrEmail(anyString(), anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
 
         // when
         Mono<RegisterResponseDto> responseDtoMono = userService.register(requestDto);
@@ -161,7 +161,7 @@ public class UserServiceTest {
         String browserName = "Chrome";
 
         when(reactiveUserRepository.findByUsername(anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(true);
         when(jwtTokenProvider.createAccessToken(any()))
@@ -232,7 +232,7 @@ public class UserServiceTest {
                 .build();
 
         when(reactiveUserRepository.findByUsername(anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(false);
 

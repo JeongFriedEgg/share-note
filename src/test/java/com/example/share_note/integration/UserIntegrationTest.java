@@ -1,8 +1,8 @@
 package com.example.share_note.integration;
 
 import com.example.share_note.dto.user.*;
-import com.example.share_note.entity.RefreshToken;
-import com.example.share_note.entity.UserEntity;
+import com.example.share_note.domain.RefreshToken;
+import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
@@ -56,8 +56,8 @@ public class UserIntegrationTest {
                 .thenReturn(Mono.empty());
         when(passwordEncoder.encode(anyString()))
                 .thenReturn(encodedPassword);
-        when(reactiveUserRepository.save(any(UserEntity.class)))
-                .thenReturn(Mono.just(UserEntity.builder()
+        when(reactiveUserRepository.save(any(User.class)))
+                .thenReturn(Mono.just(User.builder()
                         .id(1L)
                         .username(request.getUsername())
                         .password(encodedPassword)
@@ -90,7 +90,7 @@ public class UserIntegrationTest {
                 .email("test@example.com")
                 .build();
 
-        UserEntity existingUser = UserEntity.builder()
+        User existingUser = User.builder()
                 .username("testuser")
                 .email("otheremail@example.com")
                 .build();
@@ -119,7 +119,7 @@ public class UserIntegrationTest {
                 .email("test@example.com")
                 .build();
 
-        UserEntity existingUserWithEmail = UserEntity.builder()
+        User existingUserWithEmail = User.builder()
                 .username("otheruser")
                 .email("test@example.com")
                 .build();
@@ -146,7 +146,7 @@ public class UserIntegrationTest {
                 .password("testpassword")
                 .build();
 
-        UserEntity userEntity = UserEntity.builder()
+        User user = User.builder()
                 .id(1L)
                 .username("testuser")
                 .password("encodedPassword")
@@ -154,7 +154,7 @@ public class UserIntegrationTest {
                 .build();
 
         when(reactiveUserRepository.findByUsername(anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(true);
         when(reactiveRefreshTokenRepository.save(any()))
@@ -205,13 +205,13 @@ public class UserIntegrationTest {
                 .password("wrongpassword")
                 .build();
 
-        UserEntity userEntity = UserEntity.builder()
+        User user = User.builder()
                 .username("testuser")
                 .password("encodedPassword")
                 .build();
 
         when(reactiveUserRepository.findByUsername(anyString()))
-                .thenReturn(Mono.just(userEntity));
+                .thenReturn(Mono.just(user));
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(false);
 

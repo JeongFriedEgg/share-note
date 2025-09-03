@@ -5,8 +5,8 @@ import com.example.share_note.dto.user.LoginRequestDto;
 import com.example.share_note.dto.user.LoginResponseDto;
 import com.example.share_note.dto.user.RegisterRequestDto;
 import com.example.share_note.dto.user.RegisterResponseDto;
-import com.example.share_note.entity.RefreshToken;
-import com.example.share_note.entity.UserEntity;
+import com.example.share_note.domain.RefreshToken;
+import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.user.UserLoginException;
 import com.example.share_note.exception.user.UserRegistrationException;
@@ -45,7 +45,7 @@ public class UserService {
                     return null;
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    UserEntity user = UserEntity.builder()
+                    User user = User.builder()
                             .username(request.getUsername())
                             .password(passwordEncoder.encode(request.getPassword()))
                             .email(request.getEmail())
