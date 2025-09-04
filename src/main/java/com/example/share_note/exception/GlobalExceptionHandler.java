@@ -67,6 +67,8 @@ public class GlobalExceptionHandler {
             httpStatus = HttpStatus.NOT_FOUND;
         } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
             httpStatus = HttpStatus.FORBIDDEN;
+        } else if (errorCode == ErrorCode.INVALID_WORKSPACE_NAME) {
+            httpStatus = HttpStatus.BAD_REQUEST;  // 400 Bad Request
         } else {
             httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
         }
