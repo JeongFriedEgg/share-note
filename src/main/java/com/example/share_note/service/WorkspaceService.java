@@ -52,7 +52,7 @@ public class WorkspaceService {
                                 .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
                                 .flatMap(existingWorkspace -> {
                                     if (!existingWorkspace.getCreatedBy().equals(userDetails.getId())) {
-                                        return Mono.error(new WorkspaceException(ErrorCode.PERMISSION_DENIED));
+                                        return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
 
                                     if (!StringUtils.hasText(request.getName())) {
@@ -86,7 +86,7 @@ public class WorkspaceService {
                                 .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
                                 .flatMap(existingWorkspace -> {
                                     if (!existingWorkspace.getCreatedBy().equals(userDetails.getId())) {
-                                        return Mono.error(new WorkspaceException(ErrorCode.PERMISSION_DENIED));
+                                        return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
                                     return reactiveWorkspaceRepository.delete(existingWorkspace);
                                 })

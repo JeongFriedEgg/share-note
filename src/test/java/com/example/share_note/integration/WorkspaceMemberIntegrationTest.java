@@ -219,7 +219,7 @@ public class WorkspaceMemberIntegrationTest {
                 .exchange()
                 .expectStatus().isForbidden()
                 .expectBody()
-                .jsonPath("$.message").isEqualTo(ErrorCode.PERMISSION_DENIED.getMessage());
+                .jsonPath("$.message").isEqualTo(ErrorCode.WORKSPACE_PERMISSION_DENIED.getMessage());
     }
 
 
@@ -339,6 +339,6 @@ public class WorkspaceMemberIntegrationTest {
                 .exchange()
                 .expectStatus().isForbidden()
                 .expectBody()
-                .jsonPath("$.message").isEqualTo(ErrorCode.PERMISSION_DENIED.getMessage());
+                .jsonPath("$.message").isEqualTo(ErrorCode.WORKSPACE_PERMISSION_DENIED.getMessage());
     }
 }

@@ -10,6 +10,7 @@ import com.example.share_note.dto.workspacemember.WorkspaceMemberResponseDto;
 import com.example.share_note.dto.workspacemember.WorkspaceMemberRoleUpdateRequestDto;
 import com.example.share_note.enums.WorkspaceRole;
 import com.example.share_note.exception.ErrorCode;
+import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.ReactiveWorkspaceMemberRepository;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
@@ -180,8 +181,8 @@ public class WorkspaceMemberServiceTest {
         // then
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
+                        throwable instanceof WorkspaceException &&
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
                 .verify();
     }
 
@@ -204,8 +205,8 @@ public class WorkspaceMemberServiceTest {
         // then
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED)
+                        throwable instanceof WorkspaceException &&
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
                 .verify();
     }
 
@@ -297,8 +298,8 @@ public class WorkspaceMemberServiceTest {
         // then
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED)
+                        throwable instanceof WorkspaceException &&
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
                 .verify();
     }
 
@@ -348,8 +349,8 @@ public class WorkspaceMemberServiceTest {
         // then
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED)
+                        throwable instanceof WorkspaceException &&
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
                 .verify();
     }
 
@@ -413,8 +414,8 @@ public class WorkspaceMemberServiceTest {
         // then
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED
+                        throwable instanceof WorkspaceException &&
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED
                 )
                 .verify();
     }

@@ -11,7 +11,6 @@ public enum ErrorCode {
 
     USER_NOT_FOUND("AUTH_001", "사용자를 찾을 수 없습니다."),
     INVALID_PASSWORD("AUTH_002", "잘못된 비밀번호입니다."),
-
     AUTHENTICATION_FAILED("AUTH_003", "인증에 실패했습니다."),
 
     INVALID_TOKEN("TOKEN_001","유효하지 않은 토큰입니다."),
@@ -21,13 +20,20 @@ public enum ErrorCode {
     UNEXPECTED_ERROR("COMMON_001", "예기치 않은 오류가 발생했습니다."),
 
     WORKSPACE_NOT_FOUND("WORKSPACE_001","워크스페이스를 찾을 수 없습니다."),
-    PERMISSION_DENIED("WORKSPACE_002","권한이 없습니다."),
+    WORKSPACE_PERMISSION_DENIED("WORKSPACE_002","권한이 없습니다."),
     INVALID_WORKSPACE_NAME("WORKSPACE_003", "워크스페이스 이름은 공백이거나 비어 있을 수 없습니다."),
 
     MEMBER_ALREADY_EXISTS("WORKSPACE_MEMBER_001", "이미 워크스페이스 멤버입니다."),
     MEMBER_NOT_FOUND("WORKSPACE_MEMBER_002", "워크스페이스 멤버를 찾을 수 없습니다."),
     CANNOT_CHANGE_OWNER_ROLE("WORKSPACE_MEMBER_003", "소유자의 역할은 변경할 수 없습니다."),
-    CANNOT_REMOVE_OWNER("WORKSPACE_MEMBER_004", "소유자는 제거할 수 없습니다.");
+    CANNOT_REMOVE_OWNER("WORKSPACE_MEMBER_004", "소유자는 제거할 수 없습니다."),
+
+    PAGE_NOT_FOUND("PAGE_001","페이지를 찾을 수 없습니다."),
+    PARENT_PAGE_PERMISSION_DENIED("PAGE_002","상위 페이지에 대한 권한이 거부되었습니다."),
+    TARGET_PAGE_PERMISSION_DENIED("PAGE_003","대상 페이지에 대한 권한이 거부되었습니다."),
+    CANNOT_MOVE_TO_SELF("PAGE_004","페이지를 자기 자신에게로 이동할 수 없습니다."),
+    PAGE_PERMISSION_DENIED("PAGE_005","페이지에 대한 권한이 없습니다.")
+    ;
 
     private final String code;
     private final String message;

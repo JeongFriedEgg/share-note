@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
 
         if (errorCode == ErrorCode.WORKSPACE_NOT_FOUND) {
             httpStatus = HttpStatus.NOT_FOUND;
-        } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
+        } else if (errorCode == ErrorCode.WORKSPACE_PERMISSION_DENIED) {
             httpStatus = HttpStatus.FORBIDDEN;
         } else if (errorCode == ErrorCode.INVALID_WORKSPACE_NAME) {
             httpStatus = HttpStatus.BAD_REQUEST;
@@ -95,10 +95,6 @@ public class GlobalExceptionHandler {
         } else if (errorCode == ErrorCode.CANNOT_CHANGE_OWNER_ROLE ||
                 errorCode == ErrorCode.CANNOT_REMOVE_OWNER) {
             httpStatus = HttpStatus.FORBIDDEN;
-        } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
-            httpStatus = HttpStatus.FORBIDDEN;
-        } else if (errorCode == ErrorCode.WORKSPACE_NOT_FOUND) {
-            httpStatus = HttpStatus.NOT_FOUND;
         } else {
             httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
         }

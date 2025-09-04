@@ -242,7 +242,7 @@ public class WorkspaceServiceTest {
         StepVerifier.create(responseDtoMono)
                 .expectErrorMatches(throwable ->
                         throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED)
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
                 .verify();
     }
 
@@ -366,7 +366,7 @@ public class WorkspaceServiceTest {
         StepVerifier.create(resultMono)
                 .expectErrorMatches(throwable ->
                         throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.PERMISSION_DENIED)
+                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
                 .verify();
     }
 }

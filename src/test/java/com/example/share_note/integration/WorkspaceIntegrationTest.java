@@ -258,7 +258,7 @@ public class WorkspaceIntegrationTest {
                 .exchange()
                 .expectStatus().isForbidden()
                 .expectBody()
-                .jsonPath("$.message").isEqualTo(ErrorCode.PERMISSION_DENIED.getMessage());
+                .jsonPath("$.message").isEqualTo(ErrorCode.WORKSPACE_PERMISSION_DENIED.getMessage());
     }
 
     @Test
@@ -378,7 +378,7 @@ public class WorkspaceIntegrationTest {
                 .exchange()
                 .expectStatus().isForbidden()
                 .expectBody()
-                .jsonPath("$.message").isEqualTo(ErrorCode.PERMISSION_DENIED.getMessage());
+                .jsonPath("$.message").isEqualTo(ErrorCode.WORKSPACE_PERMISSION_DENIED.getMessage());
     }
 
     @Test

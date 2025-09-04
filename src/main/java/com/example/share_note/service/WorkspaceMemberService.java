@@ -5,6 +5,7 @@ import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.dto.workspacemember.*;
 import com.example.share_note.enums.WorkspaceRole;
 import com.example.share_note.exception.ErrorCode;
+import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.ReactiveWorkspaceMemberRepository;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
@@ -25,11 +26,11 @@ public class WorkspaceMemberService {
         return getCurrentUserFromContext()
                 .flatMap(userDetails ->
                         reactiveWorkspaceRepository.findById(workspaceId)
-                                .switchIfEmpty(Mono.error(new WorkspaceMemberException(ErrorCode.WORKSPACE_NOT_FOUND)))
+                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
                                 .flatMap(workspace -> checkAdminPermission(userDetails.getId(), workspaceId)
                                         .flatMap(hasPermission -> {
                                             if (!hasPermission) {
-                                                return Mono.error(new WorkspaceMemberException(ErrorCode.PERMISSION_DENIED));
+                                                return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                             }
                                             return reactiveWorkspaceMemberRepository
                                                     .existsByWorkspaceIdAndUserId(workspaceId, request.getUserId())
@@ -57,7 +58,7 @@ public class WorkspaceMemberService {
                         checkMemberPermission(userDetails.getId(), workspaceId)
                                 .flatMap(hasPermission -> {
                                     if (!hasPermission) {
-                                        return Mono.error(new WorkspaceMemberException(ErrorCode.PERMISSION_DENIED));
+                                        return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
                                     return reactiveWorkspaceMemberRepository.findByWorkspaceId(workspaceId)
                                             .map(WorkspaceMemberResponseDto::from)
@@ -77,7 +78,7 @@ public class WorkspaceMemberService {
                         checkAdminPermission(userDetails.getId(), workspaceId)
                                 .flatMap(hasPermission -> {
                                     if (!hasPermission) {
-                                        return Mono.error(new WorkspaceMemberException(ErrorCode.PERMISSION_DENIED));
+                                        return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
                                     return reactiveWorkspaceMemberRepository
                                             .findByWorkspaceIdAndUserId(workspaceId, request.getUserId())
@@ -110,7 +111,7 @@ public class WorkspaceMemberService {
                                 .switchIfEmpty(Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND)))
                                 .flatMap(requestingMember -> {
                                     if (requestingMember.getRole() != WorkspaceRole.OWNER) {
-                                        return Mono.error(new WorkspaceMemberException(ErrorCode.PERMISSION_DENIED));
+                                        return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
                                     if (currentUser.getId().equals(userId)) {
                                         return Mono.error(new WorkspaceMemberException(ErrorCode.CANNOT_REMOVE_OWNER));
