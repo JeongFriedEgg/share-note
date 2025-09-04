@@ -22,7 +22,12 @@ public enum ErrorCode {
 
     WORKSPACE_NOT_FOUND("WORKSPACE_001","워크스페이스를 찾을 수 없습니다."),
     PERMISSION_DENIED("WORKSPACE_002","권한이 없습니다."),
-    INVALID_WORKSPACE_NAME("WORKSPACE_003", "워크스페이스 이름은 공백이거나 비어 있을 수 없습니다.");
+    INVALID_WORKSPACE_NAME("WORKSPACE_003", "워크스페이스 이름은 공백이거나 비어 있을 수 없습니다."),
+
+    MEMBER_ALREADY_EXISTS("WORKSPACE_MEMBER_001", "이미 워크스페이스 멤버입니다."),
+    MEMBER_NOT_FOUND("WORKSPACE_MEMBER_002", "워크스페이스 멤버를 찾을 수 없습니다."),
+    CANNOT_CHANGE_OWNER_ROLE("WORKSPACE_MEMBER_003", "소유자의 역할은 변경할 수 없습니다."),
+    CANNOT_REMOVE_OWNER("WORKSPACE_MEMBER_004", "소유자는 제거할 수 없습니다.");
 
     private final String code;
     private final String message;

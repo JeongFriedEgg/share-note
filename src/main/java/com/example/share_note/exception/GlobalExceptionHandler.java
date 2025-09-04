@@ -68,7 +68,37 @@ public class GlobalExceptionHandler {
         } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
             httpStatus = HttpStatus.FORBIDDEN;
         } else if (errorCode == ErrorCode.INVALID_WORKSPACE_NAME) {
-            httpStatus = HttpStatus.BAD_REQUEST;  // 400 Bad Request
+            httpStatus = HttpStatus.BAD_REQUEST;
+        } else {
+            httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+
+        ErrorResponseDto errorResponse = ErrorResponseDto.builder()
+                .message(errorCode.getMessage())
+                .status(httpStatus)
+                .code(errorCode.getCode())
+                .timestamp(LocalDateTime.now())
+                .build();
+
+        return new ResponseEntity<>(errorResponse, httpStatus);
+    }
+
+    @ExceptionHandler(WorkspaceMemberException.class)
+    public ResponseEntity<ErrorResponseDto> handleWorkspaceMemberException(WorkspaceMemberException ex) {
+        ErrorCode errorCode = ex.getErrorCode();
+        HttpStatus httpStatus;
+
+        if (errorCode == ErrorCode.MEMBER_ALREADY_EXISTS) {
+            httpStatus = HttpStatus.CONFLICT;
+        } else if (errorCode == ErrorCode.MEMBER_NOT_FOUND) {
+            httpStatus = HttpStatus.NOT_FOUND;
+        } else if (errorCode == ErrorCode.CANNOT_CHANGE_OWNER_ROLE ||
+                errorCode == ErrorCode.CANNOT_REMOVE_OWNER) {
+            httpStatus = HttpStatus.FORBIDDEN;
+        } else if (errorCode == ErrorCode.PERMISSION_DENIED) {
+            httpStatus = HttpStatus.FORBIDDEN;
+        } else if (errorCode == ErrorCode.WORKSPACE_NOT_FOUND) {
+            httpStatus = HttpStatus.NOT_FOUND;
         } else {
             httpStatus = HttpStatus.INTERNAL_SERVER_ERROR;
         }
