@@ -30,9 +30,11 @@ public enum ErrorCode {
 
     PAGE_NOT_FOUND("PAGE_001","페이지를 찾을 수 없습니다."),
     PARENT_PAGE_PERMISSION_DENIED("PAGE_002","상위 페이지에 대한 권한이 거부되었습니다."),
-    TARGET_PAGE_PERMISSION_DENIED("PAGE_003","대상 페이지에 대한 권한이 거부되었습니다."),
-    CANNOT_MOVE_TO_SELF("PAGE_004","페이지를 자기 자신에게로 이동할 수 없습니다."),
-    PAGE_PERMISSION_DENIED("PAGE_005","페이지에 대한 권한이 없습니다.")
+    PAGE_PERMISSION_DENIED("PAGE_005","페이지에 대한 권한이 없습니다."),
+    PAGE_PERMISSION_NOT_FOUND("PAGE_006", "페이지 권한을 찾을 수 없습니다."),
+    PARENT_PAGE_NOT_FOUND("PAGE_007","부모 페이지를 찾을 수 없습니다."),
+    CANNOT_CHANGE_OWNER_PERMISSION("PAGE_008","페이지 소유자의 권한은 변경할 수 없습니다."),
+    INVITED_USER_NOT_WORKSPACE_MEMBER("PAGE_009", "초대하려는 사용자가 워크스페이스 멤버가 아닙니다."),
     ;
 
     private final String code;
