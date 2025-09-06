@@ -5,11 +5,10 @@ import com.example.share_note.dto.user.LoginRequestDto;
 import com.example.share_note.dto.user.LoginResponseDto;
 import com.example.share_note.dto.user.RegisterRequestDto;
 import com.example.share_note.dto.user.RegisterResponseDto;
-import com.example.share_note.entity.RefreshToken;
-import com.example.share_note.entity.UserEntity;
+import com.example.share_note.domain.RefreshToken;
+import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
-import com.example.share_note.exception.user.UserLoginException;
-import com.example.share_note.exception.user.UserRegistrationException;
+import com.example.share_note.exception.UserException;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
 import com.example.share_note.security.JwtTokenProvider;
@@ -37,15 +36,15 @@ public class UserService {
         return reactiveUserRepository.findByUsernameOrEmail(request.getUsername(),request.getEmail())
                 .flatMap(existingUser -> {
                     if (existingUser.getUsername().equals(request.getUsername())) {
-                        return Mono.error(new UserRegistrationException(ErrorCode.DUPLICATE_USERNAME));
+                        return Mono.error(new UserException(ErrorCode.DUPLICATE_USERNAME));
                     }
                     if (existingUser.getEmail().equals(request.getEmail())) {
-                        return Mono.error(new UserRegistrationException(ErrorCode.DUPLICATE_EMAIL));
+                        return Mono.error(new UserException(ErrorCode.DUPLICATE_EMAIL));
                     }
                     return null;
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    UserEntity user = UserEntity.builder()
+                    User user = User.builder()
                             .username(request.getUsername())
                             .password(passwordEncoder.encode(request.getPassword()))
                             .email(request.getEmail())
@@ -71,12 +70,12 @@ public class UserService {
             String browserName = ctx.get("browserName");
 
             return reactiveUserRepository.findByUsername(request.getUsername())
-                    .switchIfEmpty(Mono.error(new UserLoginException(ErrorCode.USER_NOT_FOUND)))
+                    .switchIfEmpty(Mono.error(new UserException(ErrorCode.USER_NOT_FOUND)))
                     .flatMap(user -> {
                         if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                             List<SimpleGrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority(user.getAuthorities()));
                             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                                    new CustomUserDetails(user.getUsername(), user.getPassword(), user.getAuthorities(), user.getEmail()),
+                                    new CustomUserDetails(user.getId(), user.getUsername(), user.getPassword(), user.getAuthorities(), user.getEmail()),
                                     null,
                                     authorities
                             );
@@ -100,7 +99,7 @@ public class UserService {
                                             .refreshToken(refreshToken)
                                             .build());
                         } else {
-                            return Mono.error(new UserLoginException(ErrorCode.INVALID_PASSWORD));
+                            return Mono.error(new UserException(ErrorCode.INVALID_PASSWORD));
                         }
                     });
         });

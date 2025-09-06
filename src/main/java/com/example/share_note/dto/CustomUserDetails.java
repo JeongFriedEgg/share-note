@@ -14,12 +14,14 @@ import java.util.stream.Collectors;
 @Getter
 public class CustomUserDetails implements UserDetails {
 
+    private final Long id;
     private final String username;
     private final String password;
     private final List<GrantedAuthority> authorities;
     private final String email;
 
-    public CustomUserDetails(String username, String password, String authorities, String email) {
+    public CustomUserDetails(Long id, String username, String password, String authorities, String email) {
+        this.id = id;
         this.username = username;
         this.password = password;
         this.authorities = parseAuthorities(authorities);
