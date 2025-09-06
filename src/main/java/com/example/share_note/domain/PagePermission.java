@@ -1,6 +1,5 @@
 package com.example.share_note.domain;
 
-import com.example.share_note.enums.PagePermissionType;
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.relational.core.mapping.Column;
@@ -25,7 +24,7 @@ public class PagePermission {
     private Long userId;
 
     @Column("permission")
-    private PagePermissionType permission;
+    private String permission;
 
     @Column("granted_at")
     private LocalDateTime grantedAt;
