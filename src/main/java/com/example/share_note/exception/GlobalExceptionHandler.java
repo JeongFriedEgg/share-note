@@ -1,7 +1,5 @@
 package com.example.share_note.exception;
 
-import com.example.share_note.exception.user.UserLoginException;
-import com.example.share_note.exception.user.UserRegistrationException;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.MalformedJwtException;
