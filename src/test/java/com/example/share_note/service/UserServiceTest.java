@@ -7,8 +7,7 @@ import com.example.share_note.dto.user.RegisterResponseDto;
 import com.example.share_note.domain.RefreshToken;
 import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
-import com.example.share_note.exception.user.UserLoginException;
-import com.example.share_note.exception.user.UserRegistrationException;
+import com.example.share_note.exception.UserException;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
 import com.example.share_note.security.JwtTokenProvider;
@@ -117,8 +116,8 @@ public class UserServiceTest {
         // then
         StepVerifier.create(responseDtoMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof UserRegistrationException &&
-                                ((UserRegistrationException) throwable).getErrorCode() == ErrorCode.DUPLICATE_USERNAME)
+                        throwable instanceof UserException &&
+                                ((UserException) throwable).getErrorCode() == ErrorCode.DUPLICATE_USERNAME)
                 .verify();
     }
 
@@ -141,8 +140,8 @@ public class UserServiceTest {
         // then
         StepVerifier.create(responseDtoMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof UserRegistrationException &&
-                                ((UserRegistrationException) throwable).getErrorCode() == ErrorCode.DUPLICATE_EMAIL)
+                        throwable instanceof UserException &&
+                                ((UserException) throwable).getErrorCode() == ErrorCode.DUPLICATE_EMAIL)
                 .verify();
     }
 
@@ -217,8 +216,8 @@ public class UserServiceTest {
         // then
         StepVerifier.create(responseDtoMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof UserLoginException &&
-                                ((UserLoginException) throwable).getErrorCode() == ErrorCode.USER_NOT_FOUND)
+                        throwable instanceof UserException &&
+                                ((UserException) throwable).getErrorCode() == ErrorCode.USER_NOT_FOUND)
                 .verify();
     }
 
@@ -246,8 +245,8 @@ public class UserServiceTest {
         // then
         StepVerifier.create(responseDtoMono)
                 .expectErrorMatches(throwable ->
-                        throwable instanceof  UserLoginException &&
-                                ((UserLoginException) throwable).getErrorCode() == ErrorCode.INVALID_PASSWORD)
+                        throwable instanceof  UserException &&
+                                ((UserException) throwable).getErrorCode() == ErrorCode.INVALID_PASSWORD)
                 .verify();
     }
 

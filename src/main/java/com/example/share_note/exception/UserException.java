@@ -5,6 +5,6 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public class JwtAuthenticationException extends RuntimeException implements ApiException {
+public class UserException extends RuntimeException {
     private final ErrorCode errorCode;
 }

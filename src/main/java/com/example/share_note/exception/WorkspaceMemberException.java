@@ -5,6 +5,6 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public class WorkspaceMemberException extends RuntimeException {
+public class WorkspaceMemberException extends RuntimeException implements ApiException {
     private final ErrorCode errorCode;
 }

@@ -4,7 +4,7 @@ import lombok.Getter;
 import org.springframework.security.authentication.BadCredentialsException;
 
 @Getter
-public class AuthenticationFailedException extends BadCredentialsException {
+public class AuthenticationFailedException extends BadCredentialsException implements ApiException {
     private final ErrorCode errorCode;
 
     public AuthenticationFailedException(ErrorCode errorCode) {

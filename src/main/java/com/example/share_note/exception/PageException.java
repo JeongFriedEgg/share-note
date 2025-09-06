@@ -5,6 +5,6 @@ import lombok.RequiredArgsConstructor;
 
 @Getter
 @RequiredArgsConstructor
-public class PageException extends RuntimeException {
+public class PageException extends RuntimeException implements ApiException {
     private final ErrorCode errorCode;
 }

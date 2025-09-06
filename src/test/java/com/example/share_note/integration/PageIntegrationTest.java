@@ -240,7 +240,7 @@ public class PageIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isForbidden()
+                .expectStatus().isNotFound()
                 .expectBody()
                 .jsonPath("$.message").isEqualTo(ErrorCode.MEMBER_NOT_FOUND.getMessage());
     }
@@ -318,7 +318,7 @@ public class PageIntegrationTest {
                 .uri("/api/workspaces/{workspaceId}/pages", 1L)
                 .header("Authorization", VALID_TOKEN)
                 .exchange()
-                .expectStatus().isForbidden()
+                .expectStatus().isNotFound()
                 .expectBody()
                 .jsonPath("$.message").isEqualTo(ErrorCode.MEMBER_NOT_FOUND.getMessage());
     }
@@ -534,7 +534,7 @@ public class PageIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
                 .exchange()
-                .expectStatus().isForbidden()
+                .expectStatus().isBadRequest()
                 .expectBody()
                 .jsonPath("$.message").isEqualTo(ErrorCode.INVITED_USER_NOT_WORKSPACE_MEMBER.getMessage());
     }
