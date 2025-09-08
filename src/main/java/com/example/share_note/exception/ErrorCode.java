@@ -35,7 +35,11 @@ public enum ErrorCode {
     PAGE_PERMISSION_DENIED("PAGE_005", "페이지에 대한 권한이 없습니다.", HttpStatus.FORBIDDEN),
     PAGE_PERMISSION_NOT_FOUND("PAGE_006", "페이지 권한을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
     PARENT_PAGE_NOT_FOUND("PAGE_007", "부모 페이지를 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
-    CANNOT_CHANGE_OWNER_PERMISSION("PAGE_008", "페이지 소유자의 권한은 변경할 수 없습니다.", HttpStatus.FORBIDDEN);
+    CANNOT_CHANGE_OWNER_PERMISSION("PAGE_008", "페이지 소유자의 권한은 변경할 수 없습니다.", HttpStatus.FORBIDDEN),
+
+    BLOCK_NOT_FOUND("BLOCK_001", "블록을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+    PARENT_BLOCK_NOT_FOUND("BLOCK_002", "부모 블록을 찾을 수 없습니다.", HttpStatus.NOT_FOUND),
+    CANNOT_MOVE_TO_SELF("BLOCK_003", "자신을 부모 블록으로 설정할 수 없습니다.", HttpStatus.BAD_REQUEST);
 
     private final String code;
     private final String message;

@@ -5,6 +5,7 @@ import org.springframework.data.r2dbc.repository.Modifying;
 import org.springframework.data.r2dbc.repository.Query;
 import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Repository
@@ -38,4 +39,35 @@ public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, L
         WHERE page_id IN (SELECT id FROM page_tree);
     """)
     Mono<Void> deleteAllByPageTree(Long pageId);
+
+    Mono<Block> findByIdAndPageId(Long id, Long pageId);
+
+    Flux<Block> findAllByPageIdAndIsArchivedFalseOrderByPositionAsc(Long pageId);
+
+
+    /**
+     * 주어진 블록과 모든 하위 블록의 isArchived 상태를 일괄적으로 업데이트합니다.
+     * CTE(Common Table Expression)를 사용하여 계층 구조를 순회합니다.
+     *
+     */
+    @Query("""
+        WITH RECURSIVE block_tree AS (
+            SELECT id
+            FROM blocks
+            WHERE id = :blockId
+
+            UNION ALL
+
+            SELECT b.id
+            FROM blocks b
+            JOIN block_tree bt ON b.parent_block_id = bt.id
+        )
+        UPDATE blocks
+        SET
+            is_archived = :isArchived,
+            updated_at = NOW(),
+            last_edited_by = :lastEditedBy
+        WHERE id IN (SELECT id FROM block_tree);
+    """)
+    Mono<Integer> updateArchiveStatusForBlockTree(Long blockId, boolean isArchived, Long lastEditedBy);
 }
