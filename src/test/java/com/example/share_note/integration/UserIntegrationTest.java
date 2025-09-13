@@ -6,8 +6,7 @@ import com.example.share_note.domain.User;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.client.AutoConfigureWebClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +18,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureWebClient
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class UserIntegrationTest {
 
     @Autowired
@@ -40,7 +41,21 @@ public class UserIntegrationTest {
     @MockBean
     private PasswordEncoder passwordEncoder;
 
+    private UUID userId;
+    private UUID refreshTokenId;
+    private UUID existingUserId;
+    private UUID existingUserWithEmailId;
+
+    @BeforeEach
+    void setUp() {
+        userId = UUID.randomUUID();
+        refreshTokenId = UUID.randomUUID();
+        existingUserId = UUID.randomUUID();
+        existingUserWithEmailId = UUID.randomUUID();
+    }
+
     @Test
+    @Order(1)
     @DisplayName("회원가입 성공 - 201 CREATED 응답")
     void register_success() {
         // given
@@ -58,7 +73,7 @@ public class UserIntegrationTest {
                 .thenReturn(encodedPassword);
         when(reactiveUserRepository.save(any(User.class)))
                 .thenReturn(Mono.just(User.builder()
-                        .id(1L)
+                        .id(userId)
                         .username(request.getUsername())
                         .password(encodedPassword)
                         .email(request.getEmail())
@@ -66,8 +81,7 @@ public class UserIntegrationTest {
                         .createdAt(LocalDateTime.now())
                         .build()));
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -81,6 +95,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(2)
     @DisplayName("회원가입 실패 - 중복된 사용자명 - 409 CONFLICT 응답")
     void register_failure_duplicationUsername() {
         // given
@@ -91,6 +106,7 @@ public class UserIntegrationTest {
                 .build();
 
         User existingUser = User.builder()
+                .id(existingUserId)
                 .username("testuser")
                 .email("otheremail@example.com")
                 .build();
@@ -98,8 +114,7 @@ public class UserIntegrationTest {
         when(reactiveUserRepository.findByUsernameOrEmail(anyString(), anyString()))
                 .thenReturn(Mono.just(existingUser));
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -110,6 +125,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(3)
     @DisplayName("회원가입 실패 - 중복된 이메일 - 409 CONFLICT 응답")
     void register_failure_duplicationEmail() {
         // given
@@ -120,14 +136,14 @@ public class UserIntegrationTest {
                 .build();
 
         User existingUserWithEmail = User.builder()
+                .id(existingUserWithEmailId)
                 .username("otheruser")
                 .email("test@example.com")
                 .build();
         when(reactiveUserRepository.findByUsernameOrEmail(anyString(), anyString()))
                 .thenReturn(Mono.just(existingUserWithEmail));
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -138,6 +154,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(4)
     @DisplayName("로그인 성공 - 200 OK 응답 및 토큰 반환")
     void login_success() {
         // given
@@ -147,7 +164,7 @@ public class UserIntegrationTest {
                 .build();
 
         User user = User.builder()
-                .id(1L)
+                .id(userId)
                 .username("testuser")
                 .password("encodedPassword")
                 .authorities("ROLE_USER")
@@ -158,10 +175,9 @@ public class UserIntegrationTest {
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(true);
         when(reactiveRefreshTokenRepository.save(any()))
-                .thenReturn(Mono.just(new RefreshToken()));
+                .thenReturn(Mono.just(RefreshToken.builder().id(refreshTokenId).build()));
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestDto)
@@ -174,6 +190,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(5)
     @DisplayName("로그인 실패 - 사용자 없음 - 401 UNAUTHORIZED 응답")
     void login_failure_userNotFound() {
         // given
@@ -185,8 +202,7 @@ public class UserIntegrationTest {
         when(reactiveUserRepository.findByUsername(anyString()))
                 .thenReturn(Mono.empty());
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestDto)
@@ -197,6 +213,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(6)
     @DisplayName("로그인 실패 - 비밀번호 불일치 - 401 UNAUTHORIZED 응답")
     void login_failure_invalidPassword() {
         // given
@@ -206,6 +223,7 @@ public class UserIntegrationTest {
                 .build();
 
         User user = User.builder()
+                .id(userId)
                 .username("testuser")
                 .password("encodedPassword")
                 .build();
@@ -215,8 +233,7 @@ public class UserIntegrationTest {
         when(passwordEncoder.matches(anyString(), anyString()))
                 .thenReturn(false);
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(requestDto)
@@ -227,6 +244,7 @@ public class UserIntegrationTest {
     }
 
     @Test
+    @Order(7)
     @DisplayName("로그아웃 성공 - 200 OK 응답")
     void logout_success() {
         // given
@@ -237,8 +255,7 @@ public class UserIntegrationTest {
         when(reactiveRefreshTokenRepository.deleteByRefreshToken(anyString()))
                 .thenReturn(Mono.empty());
 
-        // when
-        // then
+        // when & then
         webTestClient.post().uri("/auth/logout")
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(request)
@@ -247,3 +264,4 @@ public class UserIntegrationTest {
                 .expectBody().isEmpty();
     }
 }
+

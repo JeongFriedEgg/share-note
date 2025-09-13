@@ -8,15 +8,17 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 
 @Repository
-public interface ReactivePageRepository extends ReactiveCrudRepository<Page, Long> {
+public interface ReactivePageRepository extends ReactiveCrudRepository<Page, UUID> {
 
     @Query("SELECT * FROM pages WHERE id = :pageId AND workspace_id = :workspaceId")
-    Mono<Page> findByIdAndWorkspaceId(Long pageId, Long workspaceId);
+    Mono<Page> findByIdAndWorkspaceId(UUID pageId, UUID workspaceId);
 
 
-    Flux<Page> findAllByWorkspaceIdAndParentPageIdIsNull(Long workspaceId);
+    Flux<Page> findAllByWorkspaceIdAndParentPageIdIsNull(UUID workspaceId);
 
     // 단일 UPDATE 쿼리로 모든 페이지의 is_archived 상태를 변경하는 쿼리
     @Modifying
@@ -31,7 +33,7 @@ public interface ReactivePageRepository extends ReactiveCrudRepository<Page, Lon
         SET is_archived = :isArchived, updated_at = NOW(), last_edited_by = :userId
         WHERE id IN (SELECT id FROM page_tree);
     """)
-    Mono<Void> updateArchiveStatusForTree(Long pageId, boolean isArchived, Long userId);
+    Mono<Void> updateArchiveStatusForTree(UUID pageId, boolean isArchived, UUID userId);
 
     // 재귀 CTE를 사용하여 모든 하위 페이지를 영구 삭제하는 쿼리
     @Modifying
@@ -44,5 +46,5 @@ public interface ReactivePageRepository extends ReactiveCrudRepository<Page, Lon
         )
         DELETE FROM page WHERE id IN (SELECT id FROM page_tree);
     """)
-    Mono<Void> deletePageAndDescendants(Long pageId);
+    Mono<Void> deletePageAndDescendants(UUID pageId);
 }

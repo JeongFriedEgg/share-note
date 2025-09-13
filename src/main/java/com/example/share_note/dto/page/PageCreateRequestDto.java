@@ -6,7 +6,7 @@ import lombok.Getter;
 @Getter
 @Builder
 public class PageCreateRequestDto {
-    private Long parentPageId;
+    private String parentPageId;
     private String title;
     private String icon;
     private String cover;

@@ -6,7 +6,7 @@ import lombok.Getter;
 @Getter
 @Builder
 public class WorkspaceUpdateRequestDto {
-    private Long workspaceId;
+    private String workspaceId;
     private String name;
     private String description;
 }

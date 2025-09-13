@@ -5,8 +5,10 @@ import org.springframework.data.repository.reactive.ReactiveCrudRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 
 @Repository
-public interface ReactivePagePermissionRepository extends ReactiveCrudRepository<PagePermission, Long> {
-    Mono<PagePermission> findByPageIdAndUserId(Long pageId, Long userId);
+public interface ReactivePagePermissionRepository extends ReactiveCrudRepository<PagePermission, UUID> {
+    Mono<PagePermission> findByPageIdAndUserId(UUID pageId, UUID userId);
 }

@@ -6,6 +6,6 @@ import lombok.*;
 @Getter
 @Builder
 public class BlockMoveRequestDto {
-    private Long newParentBlockId;
+    private String newParentBlockId;
     private Integer newPosition;
 }

@@ -6,10 +6,12 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 @Repository
-public interface ReactiveWorkspaceMemberRepository extends ReactiveCrudRepository<WorkspaceMember, Long> {
-    Flux<WorkspaceMember> findByWorkspaceId(Long workspaceId);
-    Mono<WorkspaceMember> findByWorkspaceIdAndUserId(Long workspaceId, Long userId);
-    Mono<Void> deleteByWorkspaceIdAndUserId(Long workspaceId, Long userId);
-    Mono<Boolean> existsByWorkspaceIdAndUserId(Long workspaceId, Long userId);
+public interface ReactiveWorkspaceMemberRepository extends ReactiveCrudRepository<WorkspaceMember, UUID> {
+    Flux<WorkspaceMember> findByWorkspaceId(UUID workspaceId);
+    Mono<WorkspaceMember> findByWorkspaceIdAndUserId(UUID workspaceId, UUID userId);
+    Mono<Void> deleteByWorkspaceIdAndUserId(UUID workspaceId, UUID userId);
+    Mono<Boolean> existsByWorkspaceIdAndUserId(UUID workspaceId, UUID userId);
 }

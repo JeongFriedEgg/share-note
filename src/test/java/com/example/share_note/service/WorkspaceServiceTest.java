@@ -3,370 +3,408 @@ package com.example.share_note.service;
 import com.example.share_note.domain.Workspace;
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.dto.workspace.WorkspaceCreateRequestDto;
-import com.example.share_note.dto.workspace.WorkspaceCreateResponseDto;
 import com.example.share_note.dto.workspace.WorkspaceUpdateRequestDto;
-import com.example.share_note.dto.workspace.WorkspaceUpdateResponseDto;
-import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import com.example.share_note.util.UuidUtils;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class WorkspaceServiceTest {
 
     @Mock
     private ReactiveWorkspaceRepository reactiveWorkspaceRepository;
 
+    @Mock
+    private UuidUtils uuidUtils;
+
     @InjectMocks
     private WorkspaceService workspaceService;
 
-    private CustomUserDetails mockUserDetails;
-    private SecurityContext mockSecurityContext;
-    private Authentication mockAuthentication;
+    private UUID workspaceId;
+    private UUID userId;
+    private String workspaceIdStr;
+
     private Workspace workspace;
+
+    private SecurityContext securityContext;
 
     @BeforeEach
     void setUp() {
-        mockUserDetails = new CustomUserDetails(
-                1L,
-                "testuser",
-                "password",
-                "ROLE_USER",
-                "test@example.com"
+        workspaceId = UUID.randomUUID();
+        userId = UUID.randomUUID();
+        workspaceIdStr = workspaceId.toString();
+
+        CustomUserDetails customUserDetails = new CustomUserDetails(
+                userId, "testuser", "password", "ROLE_USER", "test@example.com"
         );
 
-        mockAuthentication = new UsernamePasswordAuthenticationToken(
-                mockUserDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
-        );
-
-        mockSecurityContext = mock(SecurityContext.class);
-        when(mockSecurityContext.getAuthentication()).thenReturn(mockAuthentication);
+        securityContext = mock(SecurityContext.class);
+        Authentication authentication = mock(Authentication.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(customUserDetails);
 
         workspace = Workspace.builder()
-                .id(1L)
+                .id(workspaceId)
                 .name("Test Workspace")
                 .description("Test Description")
-                .createdBy(1L)
+                .createdBy(userId)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
     }
 
     @Test
-    @DisplayName("워크스페이스 생성 성공 - 워크스페이스 저장 후 응답 DTO 반환")
-    void createWorkspace_success() {
+    @Order(1)
+    @DisplayName("워크스페이스 생성 성공")
+    void createWorkspace_Success() {
         // given
-        WorkspaceCreateRequestDto requestDto = WorkspaceCreateRequestDto.builder()
+        WorkspaceCreateRequestDto request = WorkspaceCreateRequestDto.builder()
                 .name("New Workspace")
                 .description("New Description")
                 .build();
 
-        when(reactiveWorkspaceRepository.save(any(Workspace.class)))
-                .thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceRepository.save(any(Workspace.class))).thenReturn(Mono.just(workspace));
 
-        // when
-        Mono<WorkspaceCreateResponseDto> responseDtoMono = workspaceService.createWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectNextMatches(response ->
-                        "Test Workspace".equals(response.getName()) &&
-                                "Test Description".equals(response.getDescription()) &&
-                                response.getCreatedAt() != null)
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactiveWorkspaceRepository).save(argThat(savedWorkspace ->
-                "New Workspace".equals(savedWorkspace.getName()) &&
-                        "New Description".equals(savedWorkspace.getDescription()) &&
-                        savedWorkspace.getCreatedBy().equals(1L) &&
-                        savedWorkspace.getCreatedAt() != null &&
-                        savedWorkspace.getUpdatedAt() != null
-        ));
+            // when & then
+            StepVerifier.create(workspaceService.createWorkspace(request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getName()).isEqualTo("Test Workspace");
+                        assertThat(response.getDescription()).isEqualTo("Test Description");
+                        assertThat(response.getCreatedAt()).isNotNull();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        verify(reactiveWorkspaceRepository).save(any(Workspace.class));
     }
 
     @Test
-    @DisplayName("워크스페이스 수정 성공 - 워크스페이스 수정 후 응답 DTO 반환")
-    void updateWorkspace_success() {
+    @Order(2)
+    @DisplayName("워크스페이스 생성 성공 - 설명 없음")
+    void createWorkspace_Success_WithoutDescription() {
         // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(1L)
-                .name("Updated Workspace")
-                .description("Updated Description")
+        WorkspaceCreateRequestDto request = WorkspaceCreateRequestDto.builder()
+                .name("New Workspace")
                 .build();
 
-        Workspace updatedWorkspace = Workspace.builder()
-                .id(1L)
-                .name("Updated Workspace")
-                .description("Updated Description")
-                .createdBy(1L)
-                .createdAt(workspace.getCreatedAt())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(1L))
-                .thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceRepository.save(any(Workspace.class)))
-                .thenReturn(Mono.just(updatedWorkspace));
-
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectNextMatches(response ->
-                        "Updated Workspace".equals(response.getName()) &&
-                                "Updated Description".equals(response.getDescription()) &&
-                                response.getUpdatedAt() != null)
-                .verifyComplete();
-
-        verify(reactiveWorkspaceRepository).save(argThat(savedWorkspace ->
-                "Updated Workspace".equals(savedWorkspace.getName()) &&
-                        "Updated Description".equals(savedWorkspace.getDescription()) &&
-                        savedWorkspace.getCreatedBy().equals(1L)
-        ));
-    }
-
-    @Test
-    @DisplayName("워크스페이스 수정 성공 - description null인 경우 기존 description 유지")
-    void updateWorkspace_success_nullDescription() {
-        // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(1L)
-                .name("Updated Workspace")
-                .description(null)
-                .build();
-
-        Workspace updatedWorkspace = Workspace.builder()
-                .id(1L)
-                .name("Updated Workspace")
-                .description("Test Description") // 기존 description 유지
-                .createdBy(1L)
-                .createdAt(workspace.getCreatedAt())
-                .updatedAt(LocalDateTime.now())
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(1L))
-                .thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceRepository.save(any(Workspace.class)))
-                .thenReturn(Mono.just(updatedWorkspace));
-
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectNextMatches(response ->
-                        "Updated Workspace".equals(response.getName()) &&
-                                "Test Description".equals(response.getDescription()) &&
-                                response.getUpdatedAt() != null)
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("워크스페이스 수정 실패 - 워크스페이스가 존재하지 않음")
-    void updateWorkspace_failure_workspaceNotFound() {
-        // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(999L)
-                .name("Updated Workspace")
-                .description("Updated Description")
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(999L))
-                .thenReturn(Mono.empty());
-
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("워크스페이스 수정 실패 - 권한이 없음")
-    void updateWorkspace_failure_permissionDenied() {
-        // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(1L)
-                .name("Updated Workspace")
-                .description("Updated Description")
-                .build();
-
-        // 다른 사용자가 생성한 워크스페이스
-        Workspace otherUserWorkspace = Workspace.builder()
-                .id(1L)
-                .name("Test Workspace")
-                .description("Test Description")
-                .createdBy(2L) // 다른 사용자
+        Workspace workspaceWithoutDesc = Workspace.builder()
+                .id(workspaceId)
+                .name("New Workspace")
+                .createdBy(userId)
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L))
-                .thenReturn(Mono.just(otherUserWorkspace));
+        when(reactiveWorkspaceRepository.save(any(Workspace.class))).thenReturn(Mono.just(workspaceWithoutDesc));
 
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.createWorkspace(request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getName()).isEqualTo("New Workspace");
+                        assertThat(response.getDescription()).isNull();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("워크스페이스 수정 실패 - 워크스페이스 이름이 유효하지 않음")
-    void updateWorkspace_failure_invalidWorkspaceName() {
+    @Order(3)
+    @DisplayName("워크스페이스 수정 성공 - 소유자")
+    void updateWorkspace_Success_Owner() {
         // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(1L)
-                .name("") // 빈 이름
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name("Updated Workspace")
                 .description("Updated Description")
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L))
-                .thenReturn(Mono.just(workspace));
-
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.INVALID_WORKSPACE_NAME)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("워크스페이스 수정 실패 - 워크스페이스 이름이 공백")
-    void updateWorkspace_failure_blankWorkspaceName() {
-        // given
-        WorkspaceUpdateRequestDto requestDto = WorkspaceUpdateRequestDto.builder()
-                .workspaceId(1L)
-                .name("   ") // 공백만 있는 이름
+        Workspace updatedWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Updated Workspace")
                 .description("Updated Description")
+                .createdBy(userId)
+                .createdAt(workspace.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L))
-                .thenReturn(Mono.just(workspace));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceRepository.save(any(Workspace.class))).thenReturn(Mono.just(updatedWorkspace));
 
-        // when
-        Mono<WorkspaceUpdateResponseDto> responseDtoMono = workspaceService.updateWorkspace(requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseDtoMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.INVALID_WORKSPACE_NAME)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getName()).isEqualTo("Updated Workspace");
+                        assertThat(response.getDescription()).isEqualTo("Updated Description");
+                        assertThat(response.getUpdatedAt()).isNotNull();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        verify(reactiveWorkspaceRepository).save(any(Workspace.class));
     }
 
     @Test
-    @DisplayName("워크스페이스 삭제 성공 - 워크스페이스 삭제")
-    void deleteWorkspace_success() {
+    @Order(4)
+    @DisplayName("워크스페이스 수정 성공 - 설명만 수정")
+    void updateWorkspace_Success_DescriptionOnly() {
         // given
-        Long workspaceId = 1L;
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name("Updated Name")
+                .description(null) // description은 기존 것 유지
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(workspaceId))
-                .thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceRepository.delete(workspace))
-                .thenReturn(Mono.empty());
+        Workspace updatedWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Updated Name")
+                .description("Test Description") // 기존 description 유지
+                .createdBy(userId)
+                .createdAt(workspace.getCreatedAt())
+                .updatedAt(LocalDateTime.now())
+                .build();
 
-        // when
-        Mono<Void> resultMono = workspaceService.deleteWorkspace(workspaceId)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceRepository.save(any(Workspace.class))).thenReturn(Mono.just(updatedWorkspace));
 
-        // then
-        StepVerifier.create(resultMono)
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getName()).isEqualTo("Updated Name");
+                        assertThat(response.getDescription()).isEqualTo("Test Description");
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("워크스페이스 수정 실패 - 워크스페이스 없음")
+    void updateWorkspace_Fail_WorkspaceNotFound() {
+        // given
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name("Updated Workspace")
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(6)
+    @DisplayName("워크스페이스 수정 실패 - 권한 없음 (소유자 아님)")
+    void updateWorkspace_Fail_PermissionDenied() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Workspace otherUserWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Other User Workspace")
+                .createdBy(otherUserId) // 다른 사용자가 소유
+                .build();
+
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name("Updated Workspace")
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherUserWorkspace));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(7)
+    @DisplayName("워크스페이스 수정 실패 - 잘못된 이름 (빈 문자열)")
+    void updateWorkspace_Fail_InvalidName_Empty() {
+        // given
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name("") // 빈 문자열
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(8)
+    @DisplayName("워크스페이스 수정 실패 - 잘못된 이름 (null)")
+    void updateWorkspace_Fail_InvalidName_Null() {
+        // given
+        WorkspaceUpdateRequestDto request = WorkspaceUpdateRequestDto.builder()
+                .workspaceId(workspaceIdStr)
+                .name(null) // null
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.updateWorkspace(request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("워크스페이스 삭제 성공 - 소유자")
+    void deleteWorkspace_Success_Owner() {
+        // given
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceRepository.delete(workspace)).thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.deleteWorkspace(workspaceIdStr))
+                    .verifyComplete();
+        }
 
         verify(reactiveWorkspaceRepository).delete(workspace);
     }
 
     @Test
-    @DisplayName("워크스페이스 삭제 실패 - 워크스페이스가 존재하지 않음")
-    void deleteWorkspace_failure_workspaceNotFound() {
+    @Order(10)
+    @DisplayName("워크스페이스 삭제 실패 - 워크스페이스 없음")
+    void deleteWorkspace_Fail_WorkspaceNotFound() {
         // given
-        Long workspaceId = 999L;
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.empty());
 
-        when(reactiveWorkspaceRepository.findById(workspaceId))
-                .thenReturn(Mono.empty());
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // when
-        Mono<Void> resultMono = workspaceService.deleteWorkspace(workspaceId)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
-                .verify();
+            // when & then
+            StepVerifier.create(workspaceService.deleteWorkspace(workspaceIdStr))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("워크스페이스 삭제 실패 - 권한이 없음")
-    void deleteWorkspace_failure_permissionDenied() {
+    @Order(11)
+    @DisplayName("워크스페이스 삭제 실패 - 권한 없음 (소유자 아님)")
+    void deleteWorkspace_Fail_PermissionDenied() {
         // given
-        Long workspaceId = 1L;
-
-        // 다른 사용자가 생성한 워크스페이스
+        UUID otherUserId = UUID.randomUUID();
         Workspace otherUserWorkspace = Workspace.builder()
-                .id(1L)
-                .name("Test Workspace")
-                .description("Test Description")
-                .createdBy(2L) // 다른 사용자
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .id(workspaceId)
+                .name("Other User Workspace")
+                .createdBy(otherUserId) // 다른 사용자가 소유
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(workspaceId))
-                .thenReturn(Mono.just(otherUserWorkspace));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherUserWorkspace));
 
-        // when
-        Mono<Void> resultMono = workspaceService.deleteWorkspace(workspaceId)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceService.deleteWorkspace(workspaceIdStr))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 }

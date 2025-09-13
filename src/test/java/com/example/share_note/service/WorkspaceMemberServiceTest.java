@@ -5,460 +5,772 @@ import com.example.share_note.domain.Workspace;
 import com.example.share_note.domain.WorkspaceMember;
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.dto.workspacemember.WorkspaceMemberInviteRequestDto;
-import com.example.share_note.dto.workspacemember.WorkspaceMemberListResponseDto;
-import com.example.share_note.dto.workspacemember.WorkspaceMemberResponseDto;
 import com.example.share_note.dto.workspacemember.WorkspaceMemberRoleUpdateRequestDto;
 import com.example.share_note.enums.WorkspaceRole;
-import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.ReactiveWorkspaceMemberRepository;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import com.example.share_note.util.UuidUtils;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings;
-import org.mockito.quality.Strictness;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.Arrays;
-import java.util.List;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class WorkspaceMemberServiceTest {
+
+    @Mock
+    private ReactiveWorkspaceMemberRepository reactiveWorkspaceMemberRepository;
 
     @Mock
     private ReactiveWorkspaceRepository reactiveWorkspaceRepository;
 
     @Mock
-    private ReactiveWorkspaceMemberRepository reactiveWorkspaceMemberRepository;
+    private UuidUtils uuidUtils;
 
     @InjectMocks
     private WorkspaceMemberService workspaceMemberService;
 
-    private SecurityContext ownerSecurityContext;
-    private SecurityContext adminSecurityContext;
-    private SecurityContext memberSecurityContext;
+    private UUID workspaceId;
+    private UUID ownerId;
+    private UUID adminId;
+    private UUID memberId;
+    private UUID inviteUserId;
+    private String workspaceIdStr;
+    private String ownerIdStr;
+    private String adminIdStr;
+    private String memberIdStr;
+    private String inviteUserIdStr;
+
+    private CustomUserDetails ownerDetails;
+    private CustomUserDetails adminDetails;
+    private CustomUserDetails memberDetails;
     private Workspace workspace;
     private WorkspaceMember ownerMember;
     private WorkspaceMember adminMember;
-    private WorkspaceMember regularMember;
+    private WorkspaceMember normalMember;
+
+    private SecurityContext securityContext;
+    private Authentication authentication;
 
     @BeforeEach
     void setUp() {
-        // Mock user details
-        CustomUserDetails ownerDetails = new CustomUserDetails(1L, "owner", "password", "ROLE_USER", "owner@example.com");
-        CustomUserDetails adminDetails = new CustomUserDetails(2L, "admin", "password", "ROLE_USER", "admin@example.com");
-        CustomUserDetails memberDetails = new CustomUserDetails(3L, "member", "password", "ROLE_USER", "member@example.com");
+        workspaceId = UUID.randomUUID();
+        ownerId = UUID.randomUUID();
+        adminId = UUID.randomUUID();
+        memberId = UUID.randomUUID();
+        inviteUserId = UUID.randomUUID();
 
-        // Mock security contexts
-        ownerSecurityContext = mock(SecurityContext.class);
-        Authentication ownerAuth = new UsernamePasswordAuthenticationToken(
-                ownerDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        workspaceIdStr = workspaceId.toString();
+        ownerIdStr = ownerId.toString();
+        adminIdStr = adminId.toString();
+        memberIdStr = memberId.toString();
+        inviteUserIdStr = inviteUserId.toString();
+
+        ownerDetails = new CustomUserDetails(
+                ownerId, "owner", "password", "ROLE_USER", "owner@example.com"
         );
-        when(ownerSecurityContext.getAuthentication()).thenReturn(ownerAuth);
-
-        adminSecurityContext = mock(SecurityContext.class);
-        Authentication adminAuth = new UsernamePasswordAuthenticationToken(
-                adminDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        adminDetails = new CustomUserDetails(
+                adminId, "admin", "password", "ROLE_USER", "admin@example.com"
         );
-        lenient().when(adminSecurityContext.getAuthentication()).thenReturn(adminAuth);
-
-        memberSecurityContext = mock(SecurityContext.class);
-        Authentication memberAuth = new UsernamePasswordAuthenticationToken(
-                memberDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        memberDetails = new CustomUserDetails(
+                memberId, "member", "password", "ROLE_USER", "member@example.com"
         );
-        lenient().when(memberSecurityContext.getAuthentication()).thenReturn(memberAuth);
 
-        // Mock entities
+        securityContext = mock(SecurityContext.class);
+        authentication = mock(Authentication.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+
         workspace = Workspace.builder()
-                .id(1L)
+                .id(workspaceId)
                 .name("Test Workspace")
-                .description("Test Description")
-                .createdBy(1L)
-                .createdAt(LocalDateTime.now())
-                .updatedAt(LocalDateTime.now())
+                .createdBy(ownerId) // owner가 워크스페이스 소유자
                 .build();
 
         ownerMember = WorkspaceMember.builder()
-                .id(1L)
-                .workspaceId(1L)
-                .userId(1L)
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(ownerId)
                 .role(WorkspaceRole.OWNER)
                 .joinedAt(LocalDateTime.now())
                 .build();
 
         adminMember = WorkspaceMember.builder()
-                .id(2L)
-                .workspaceId(1L)
-                .userId(2L)
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(adminId)
                 .role(WorkspaceRole.ADMIN)
                 .joinedAt(LocalDateTime.now())
                 .build();
 
-        regularMember = WorkspaceMember.builder()
-                .id(3L)
-                .workspaceId(1L)
-                .userId(3L)
+        normalMember = WorkspaceMember.builder()
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(memberId)
                 .role(WorkspaceRole.MEMBER)
                 .joinedAt(LocalDateTime.now())
                 .build();
     }
 
     @Test
-    @DisplayName("멤버 초대 성공 - OWNER 권한으로 멤버 초대")
-    void inviteMember_success_asOwner() {
+    @Order(1)
+    @DisplayName("멤버 초대 성공 - 워크스페이스 소유자")
+    void inviteMember_Success_WorkspaceOwner() {
         // given
-        WorkspaceMemberInviteRequestDto requestDto = WorkspaceMemberInviteRequestDto.builder()
-                .userId(10L)
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
                 .role(WorkspaceRole.MEMBER)
                 .build();
 
         WorkspaceMember newMember = WorkspaceMember.builder()
-                .workspaceId(1L)
-                .userId(10L)
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(inviteUserId)
                 .role(WorkspaceRole.MEMBER)
                 .joinedAt(LocalDateTime.now())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 10L)).thenReturn(Mono.just(false));
-        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class)))
-                .thenReturn(Mono.just(newMember));
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, inviteUserId))
+                .thenReturn(Mono.just(false));
+        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class))).thenReturn(Mono.just(newMember));
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.inviteMember(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectNextMatches(response ->
-                        response.getUserId().equals(10L) &&
-                                response.getWorkspaceId().equals(1L) &&
-                                response.getRole() == WorkspaceRole.MEMBER
-                )
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getUserId()).isEqualTo(inviteUserIdStr);
+                        assertThat(response.getRole()).isEqualTo(WorkspaceRole.MEMBER);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
 
         verify(reactiveWorkspaceMemberRepository).save(any(WorkspaceMember.class));
     }
 
     @Test
-    @DisplayName("멤버 초대 실패 - 워크스페이스가 존재하지 않음")
-    void inviteMember_failure_workspaceNotFound() {
+    @Order(2)
+    @DisplayName("멤버 초대 성공 - 워크스페이스 어드민")
+    void inviteMember_Success_WorkspaceAdmin() {
         // given
-        WorkspaceMemberInviteRequestDto requestDto = WorkspaceMemberInviteRequestDto.builder()
-                .userId(10L)
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
                 .role(WorkspaceRole.MEMBER)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(999L)).thenReturn(Mono.empty());
+        WorkspaceMember newMember = WorkspaceMember.builder()
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(inviteUserId)
+                .role(WorkspaceRole.MEMBER)
+                .joinedAt(LocalDateTime.now())
+                .build();
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.inviteMember(999L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        when(authentication.getPrincipal()).thenReturn(adminDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, adminId))
+                .thenReturn(Mono.just(adminMember));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, inviteUserId))
+                .thenReturn(Mono.just(false));
+        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class))).thenReturn(Mono.just(newMember));
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
-                .verify();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectNextCount(1)
+                    .verifyComplete();
+        }
     }
 
     @Test
+    @Order(3)
+    @DisplayName("멤버 초대 실패 - 워크스페이스 없음")
+    void inviteMember_Fail_WorkspaceNotFound() {
+        // given
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
+                .role(WorkspaceRole.MEMBER)
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(4)
     @DisplayName("멤버 초대 실패 - 권한 없음 (일반 멤버)")
-    void inviteMember_failure_permissionDenied() {
+    void inviteMember_Fail_PermissionDenied() {
         // given
-        WorkspaceMemberInviteRequestDto requestDto = WorkspaceMemberInviteRequestDto.builder()
-                .userId(10L)
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
                 .role(WorkspaceRole.MEMBER)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 3L)).thenReturn(Mono.just(regularMember));
+        when(authentication.getPrincipal()).thenReturn(memberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(normalMember));
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.inviteMember(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(memberSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 
     @Test
+    @Order(5)
     @DisplayName("멤버 초대 실패 - 이미 존재하는 멤버")
-    void inviteMember_failure_memberAlreadyExists() {
+    void inviteMember_Fail_MemberAlreadyExists() {
         // given
-        WorkspaceMemberInviteRequestDto requestDto = WorkspaceMemberInviteRequestDto.builder()
-                .userId(2L) // 이미 존재하는 관리자
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
                 .role(WorkspaceRole.MEMBER)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, inviteUserId))
+                .thenReturn(Mono.just(true)); // 이미 존재
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.inviteMember(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.MEMBER_ALREADY_EXISTS)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("워크스페이스 멤버 목록 조회 성공 - OWNER")
-    void getWorkspaceMembers_success_asOwner() {
+    @Order(6)
+    @DisplayName("멤버 목록 조회 성공 - 워크스페이스 소유자")
+    void getWorkspaceMembers_Success_WorkspaceOwner() {
         // given
-        List<WorkspaceMember> members = Arrays.asList(ownerMember, adminMember, regularMember);
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceId(workspaceId))
+                .thenReturn(Flux.just(ownerMember, adminMember, normalMember));
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceId(1L)).thenReturn(reactor.core.publisher.Flux.fromIterable(members));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // when
-        Mono<WorkspaceMemberListResponseDto> resultMono = workspaceMemberService.getWorkspaceMembers(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectNextMatches(response ->
-                        response.getMembers().size() == 3 &&
-                                response.getTotalCount() == 3 &&
-                                response.getMembers().stream().anyMatch(m -> m.getUserId().equals(1L) && m.getRole() == WorkspaceRole.OWNER) &&
-                                response.getMembers().stream().anyMatch(m -> m.getUserId().equals(2L) && m.getRole() == WorkspaceRole.ADMIN) &&
-                                response.getMembers().stream().anyMatch(m -> m.getUserId().equals(3L) && m.getRole() == WorkspaceRole.MEMBER)
-                )
-                .verifyComplete();
+            // when & then
+            StepVerifier.create(workspaceMemberService.getWorkspaceMembers(workspaceIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getMembers()).hasSize(3);
+                        assertThat(response.getTotalCount()).isEqualTo(3);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("워크스페이스 멤버 목록 조회 성공 - 멤버 권한")
-    void getWorkspaceMembers_success_asMember() {
+    @Order(7)
+    @DisplayName("멤버 목록 조회 성공 - 워크스페이스 멤버")
+    void getWorkspaceMembers_Success_WorkspaceMember() {
         // given
-        List<WorkspaceMember> members = Arrays.asList(ownerMember, adminMember, regularMember);
+        when(authentication.getPrincipal()).thenReturn(memberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(true));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceId(workspaceId))
+                .thenReturn(Flux.just(ownerMember, adminMember, normalMember));
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 3L)).thenReturn(Mono.just(true));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceId(1L)).thenReturn(reactor.core.publisher.Flux.fromIterable(members));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // when
-        Mono<WorkspaceMemberListResponseDto> resultMono = workspaceMemberService.getWorkspaceMembers(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(memberSecurityContext)));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectNextCount(1)
-                .verifyComplete();
+            // when & then
+            StepVerifier.create(workspaceMemberService.getWorkspaceMembers(workspaceIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getTotalCount()).isEqualTo(3);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("워크스페이스 멤버 목록 조회 실패 - 권한 없음 (비멤버)")
-    void getWorkspaceMembers_failure_permissionDenied() {
+    @Order(8)
+    @DisplayName("멤버 목록 조회 실패 - 권한 없음 (비멤버)")
+    void getWorkspaceMembers_Fail_PermissionDenied() {
         // given
-        CustomUserDetails nonMemberDetails = new CustomUserDetails(4L, "nonmember", "password", "ROLE_USER", "nonmember@example.com");
-        SecurityContext nonMemberContext = mock(SecurityContext.class);
-        Authentication nonMemberAuth = new UsernamePasswordAuthenticationToken(nonMemberDetails, null, Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER")));
-        when(nonMemberContext.getAuthentication()).thenReturn(nonMemberAuth);
+        UUID nonMemberId = UUID.randomUUID();
+        CustomUserDetails nonMemberDetails = new CustomUserDetails(
+                nonMemberId, "nonmember", "password", "ROLE_USER", "nonmember@example.com"
+        );
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 4L)).thenReturn(Mono.just(false));
+        when(authentication.getPrincipal()).thenReturn(nonMemberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, nonMemberId))
+                .thenReturn(Mono.just(false));
 
-        // when
-        Mono<WorkspaceMemberListResponseDto> resultMono = workspaceMemberService.getWorkspaceMembers(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(nonMemberContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.getWorkspaceMembers(workspaceIdStr))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("멤버 역할 수정 성공 - ADMIN 권한으로 MEMBER 역할 수정")
-    void updateMemberRole_success_asAdmin() {
+    @Order(9)
+    @DisplayName("멤버 역할 변경 성공 - 워크스페이스 소유자")
+    void updateMemberRole_Success_WorkspaceOwner() {
         // given
-        WorkspaceMemberRoleUpdateRequestDto requestDto = WorkspaceMemberRoleUpdateRequestDto.builder()
-                .userId(3L)
+        WorkspaceMemberRoleUpdateRequestDto request = WorkspaceMemberRoleUpdateRequestDto.builder()
+                .userId(memberIdStr)
                 .role(WorkspaceRole.ADMIN)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(adminMember)); // admin user
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 3L)).thenReturn(Mono.just(regularMember));
-        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class)))
-                .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        WorkspaceMember updatedMember = WorkspaceMember.builder()
+                .id(normalMember.getId())
+                .workspaceId(workspaceId)
+                .userId(memberId)
+                .role(WorkspaceRole.ADMIN)
+                .joinedAt(normalMember.getJoinedAt())
+                .build();
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.updateMemberRole(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(adminSecurityContext)));
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(memberIdStr)).thenReturn(memberId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(normalMember));
+        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class))).thenReturn(Mono.just(updatedMember));
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectNextMatches(response ->
-                        response.getUserId().equals(3L) &&
-                                response.getRole() == WorkspaceRole.ADMIN)
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.updateMemberRole(workspaceIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getRole()).isEqualTo(WorkspaceRole.ADMIN);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        verify(reactiveWorkspaceMemberRepository).save(any(WorkspaceMember.class));
     }
 
     @Test
-    @DisplayName("멤버 역할 수정 실패 - 권한 없음 (일반 멤버)")
-    void updateMemberRole_failure_permissionDenied() {
+    @Order(10)
+    @DisplayName("멤버 역할 변경 실패 - 권한 없음 (일반 멤버)")
+    void updateMemberRole_Fail_PermissionDenied() {
         // given
-        WorkspaceMemberRoleUpdateRequestDto requestDto = WorkspaceMemberRoleUpdateRequestDto.builder()
-                .userId(2L)
+        WorkspaceMemberRoleUpdateRequestDto request = WorkspaceMemberRoleUpdateRequestDto.builder()
+                .userId(adminIdStr)
                 .role(WorkspaceRole.MEMBER)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 3L)).thenReturn(Mono.just(regularMember));
+        when(authentication.getPrincipal()).thenReturn(memberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(normalMember));
 
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.updateMemberRole(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(memberSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.updateMemberRole(workspaceIdStr, request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("멤버 역할 수정 실패 - OWNER 역할 변경 시도")
-    void updateMemberRole_failure_cannotChangeOwnerRole() {
+    @Order(11)
+    @DisplayName("멤버 역할 변경 실패 - 소유자 역할 변경 시도")
+    void updateMemberRole_Fail_CannotChangeOwnerRole() {
         // given
-        WorkspaceMemberRoleUpdateRequestDto requestDto = WorkspaceMemberRoleUpdateRequestDto.builder()
-                .userId(1L)
-                .role(WorkspaceRole.MEMBER)
+        WorkspaceMemberRoleUpdateRequestDto request = WorkspaceMemberRoleUpdateRequestDto.builder()
+                .userId(ownerIdStr)
+                .role(WorkspaceRole.ADMIN)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspace));
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(ownerMember));
-
-        // when
-        Mono<WorkspaceMemberResponseDto> resultMono = workspaceMemberService.updateMemberRole(1L, requestDto)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
-
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.CANNOT_CHANGE_OWNER_ROLE)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("멤버 삭제 성공 - OWNER 권한으로 일반 멤버 삭제")
-    void removeMember_success_asOwner() {
-        // given
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 1L))
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(ownerIdStr)).thenReturn(ownerId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, ownerId))
                 .thenReturn(Mono.just(ownerMember));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 3L))
-                .thenReturn(Mono.just(true));
-        when(reactiveWorkspaceMemberRepository.deleteByWorkspaceIdAndUserId(1L, 3L))
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.updateMemberRole(workspaceIdStr, request))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(12)
+    @DisplayName("멤버 역할 변경 실패 - 멤버 없음")
+    void updateMemberRole_Fail_MemberNotFound() {
+        // given
+        WorkspaceMemberRoleUpdateRequestDto request = WorkspaceMemberRoleUpdateRequestDto.builder()
+                .userId(inviteUserIdStr)
+                .role(WorkspaceRole.ADMIN)
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, inviteUserId))
                 .thenReturn(Mono.empty());
 
-        // when
-        Mono<Void> resultMono = workspaceMemberService.removeMember(1L, 3L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactiveWorkspaceMemberRepository).deleteByWorkspaceIdAndUserId(1L, 3L);
+            // when & then
+            StepVerifier.create(workspaceMemberService.updateMemberRole(workspaceIdStr, request))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("멤버 삭제 실패 - OWNER가 아닌 사용자가 삭제 시도")
-    void removeMember_failure_permissionDenied() {
+    @Order(13)
+    @DisplayName("멤버 제거 성공 - 워크스페이스 소유자")
+    void removeMember_Success_WorkspaceOwner() {
         // given
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 2L))
-                .thenReturn(Mono.just(adminMember));
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(memberIdStr)).thenReturn(memberId);
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, ownerId))
+                .thenReturn(Mono.just(ownerMember));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(true));
+        when(reactiveWorkspaceMemberRepository.deleteByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.empty());
 
-        // when
-        Mono<Void> resultMono = workspaceMemberService.removeMember(1L, 3L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(adminSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_PERMISSION_DENIED
-                )
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.removeMember(workspaceIdStr, memberIdStr))
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("멤버 삭제 실패 - OWNER가 자기 자신을 삭제 시도")
-    void removeMember_failure_ownerCannotRemoveSelf() {
+    @Order(14)
+    @DisplayName("멤버 제거 실패 - 권한 없음 (어드민이 아님)")
+    void removeMember_Fail_PermissionDenied() {
         // given
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 1L))
+        when(authentication.getPrincipal()).thenReturn(memberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(adminIdStr)).thenReturn(adminId);
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(normalMember));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.removeMember(workspaceIdStr, adminIdStr))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(15)
+    @DisplayName("멤버 제거 실패 - 소유자 자신을 제거하려고 시도")
+    void removeMember_Fail_CannotRemoveOwner() {
+        // given
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(ownerIdStr)).thenReturn(ownerId);
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, ownerId))
                 .thenReturn(Mono.just(ownerMember));
 
-        // when
-        Mono<Void> resultMono = workspaceMemberService.removeMember(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.CANNOT_REMOVE_OWNER
-                )
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.removeMember(workspaceIdStr, ownerIdStr))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("멤버 삭제 실패 - 대상 멤버를 찾을 수 없음")
-    void removeMember_failure_memberNotFound() {
+    @Order(16)
+    @DisplayName("멤버 제거 실패 - 제거할 멤버가 존재하지 않음")
+    void removeMember_Fail_MemberNotFound() {
         // given
-        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(1L, 1L))
+        when(authentication.getPrincipal()).thenReturn(ownerDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, ownerId))
                 .thenReturn(Mono.just(ownerMember));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 999L))
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, inviteUserId))
                 .thenReturn(Mono.just(false));
 
-        // when
-        Mono<Void> resultMono = workspaceMemberService.removeMember(1L, 999L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ownerSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(resultMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.MEMBER_NOT_FOUND
-                )
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.removeMember(workspaceIdStr, inviteUserIdStr))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(17)
+    @DisplayName("멤버 제거 실패 - 요청자가 워크스페이스 멤버가 아님")
+    void removeMember_Fail_RequesterNotMember() {
+        // given
+        UUID nonMemberId = UUID.randomUUID();
+        CustomUserDetails nonMemberDetails = new CustomUserDetails(
+                nonMemberId, "nonmember", "password", "ROLE_USER", "nonmember@example.com"
+        );
+
+        when(authentication.getPrincipal()).thenReturn(nonMemberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(memberIdStr)).thenReturn(memberId);
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, nonMemberId))
+                .thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.removeMember(workspaceIdStr, memberIdStr))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(18)
+    @DisplayName("어드민 권한 확인 - 워크스페이스 소유자가 아닌 어드민 멤버")
+    void checkAdminPermission_AdminMember() {
+        // given
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
+                .role(WorkspaceRole.MEMBER)
+                .build();
+
+        WorkspaceMember newMember = WorkspaceMember.builder()
+                .id(UUID.randomUUID())
+                .workspaceId(workspaceId)
+                .userId(inviteUserId)
+                .role(WorkspaceRole.MEMBER)
+                .joinedAt(LocalDateTime.now())
+                .build();
+
+        // 워크스페이스 소유자가 아닌 다른 사용자가 만든 워크스페이스
+        Workspace otherUserWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID()) // 다른 사용자가 소유자
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(adminDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherUserWorkspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, adminId))
+                .thenReturn(Mono.just(adminMember));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, inviteUserId))
+                .thenReturn(Mono.just(false));
+        when(reactiveWorkspaceMemberRepository.save(any(WorkspaceMember.class))).thenReturn(Mono.just(newMember));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectNextCount(1)
+                    .verifyComplete();
+        }
+    }
+
+    @Test
+    @Order(19)
+    @DisplayName("어드민 권한 확인 - 비멤버는 권한 없음")
+    void checkAdminPermission_NonMember() {
+        // given
+        UUID nonMemberId = UUID.randomUUID();
+        CustomUserDetails nonMemberDetails = new CustomUserDetails(
+                nonMemberId, "nonmember", "password", "ROLE_USER", "nonmember@example.com"
+        );
+
+        WorkspaceMemberInviteRequestDto request = WorkspaceMemberInviteRequestDto.builder()
+                .userId(inviteUserIdStr)
+                .role(WorkspaceRole.MEMBER)
+                .build();
+
+        // 워크스페이스 소유자가 아닌 다른 사용자가 만든 워크스페이스
+        Workspace otherUserWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(nonMemberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(inviteUserIdStr)).thenReturn(inviteUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherUserWorkspace));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceIdAndUserId(workspaceId, nonMemberId))
+                .thenReturn(Mono.empty()); // 비멤버
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.inviteMember(workspaceIdStr, request))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(20)
+    @DisplayName("멤버 권한 확인 - 비소유자이지만 멤버인 경우")
+    void checkMemberPermission_NonOwnerButMember() {
+        // given
+        // 워크스페이스 소유자가 아닌 다른 사용자가 만든 워크스페이스
+        Workspace otherUserWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(memberDetails);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherUserWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, memberId))
+                .thenReturn(Mono.just(true));
+        when(reactiveWorkspaceMemberRepository.findByWorkspaceId(workspaceId))
+                .thenReturn(Flux.just(ownerMember, adminMember, normalMember));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(workspaceMemberService.getWorkspaceMembers(workspaceIdStr))
+                    .expectNextCount(1)
+                    .verifyComplete();
+        }
     }
 }

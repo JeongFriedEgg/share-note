@@ -10,6 +10,7 @@ import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
 import java.util.Set;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -20,13 +21,13 @@ import java.util.Set;
 public class Page {
 
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("workspace_id")
-    private Long workspaceId;
+    private UUID workspaceId;
 
     @Column("parent_page_id")
-    private Long parentPageId;
+    private UUID parentPageId;
 
     @Column("title")
     private String title;
@@ -56,10 +57,10 @@ public class Page {
     private LocalDateTime updatedAt;
 
     @Column("created_by")
-    private Long createdBy;
+    private UUID createdBy;
 
     @Column("last_edited_by")
-    private Long lastEditedBy;
+    private UUID lastEditedBy;
 
     // R2DBC는 관계를 직접 매핑하지 않으므로 @Transient로 무시
     @Transient

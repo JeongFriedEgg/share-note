@@ -9,6 +9,7 @@ import com.example.share_note.dto.workspace.WorkspaceUpdateResponseDto;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
+import com.example.share_note.util.UuidUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -21,6 +22,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class WorkspaceService {
     private final ReactiveWorkspaceRepository reactiveWorkspaceRepository;
+    private final UuidUtils uuidUtils;
 
     public Mono<WorkspaceCreateResponseDto> createWorkspace(WorkspaceCreateRequestDto request) {
         return ReactiveSecurityContextHolder.getContext()
@@ -48,7 +50,7 @@ public class WorkspaceService {
                 .map(securityContext ->
                         (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
                 .flatMap(userDetails ->
-                        reactiveWorkspaceRepository.findById(request.getWorkspaceId())
+                        reactiveWorkspaceRepository.findById(uuidUtils.fromString(request.getWorkspaceId()))
                                 .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
                                 .flatMap(existingWorkspace -> {
                                     if (!existingWorkspace.getCreatedBy().equals(userDetails.getId())) {
@@ -77,12 +79,12 @@ public class WorkspaceService {
                         .build());
     }
 
-    public Mono<Void> deleteWorkspace(Long workspaceId) {
+    public Mono<Void> deleteWorkspace(String workspaceId) {
         return ReactiveSecurityContextHolder.getContext()
                 .map(securityContext ->
                         (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
                 .flatMap(userDetails ->
-                        reactiveWorkspaceRepository.findById(workspaceId)
+                        reactiveWorkspaceRepository.findById(uuidUtils.fromString(workspaceId))
                                 .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
                                 .flatMap(existingWorkspace -> {
                                     if (!existingWorkspace.getCreatedBy().equals(userDetails.getId())) {

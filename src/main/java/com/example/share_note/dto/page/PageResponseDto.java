@@ -11,9 +11,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class PageResponseDto {
-    private Long id;
-    private Long workspaceId;
-    private Long parentPageId;
+    private String id;
+    private String workspaceId;
+    private String parentPageId;
     private String title;
     private String icon;
     private String cover;
@@ -23,14 +23,14 @@ public class PageResponseDto {
     private Boolean isTemplate;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private Long createdBy;
-    private Long lastEditedBy;
+    private String createdBy;
+    private String lastEditedBy;
 
     public static PageResponseDto from(Page page) {
         return PageResponseDto.builder()
-                .id(page.getId())
-                .workspaceId(page.getWorkspaceId())
-                .parentPageId(page.getParentPageId())
+                .id(page.getId().toString())
+                .workspaceId(page.getWorkspaceId().toString())
+                .parentPageId(page.getParentPageId() != null ? page.getParentPageId().toString() : null)
                 .title(page.getTitle())
                 .icon(page.getIcon())
                 .cover(page.getCover())
@@ -40,8 +40,8 @@ public class PageResponseDto {
                 .isTemplate(page.isTemplate())
                 .createdAt(page.getCreatedAt())
                 .updatedAt(page.getUpdatedAt())
-                .createdBy(page.getCreatedBy())
-                .lastEditedBy(page.getLastEditedBy())
+                .createdBy(page.getCreatedBy().toString())
+                .lastEditedBy(page.getLastEditedBy().toString())
                 .build();
     }
 }

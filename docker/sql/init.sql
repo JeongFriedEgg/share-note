@@ -1,17 +1,17 @@
 CREATE TABLE IF NOT EXISTS users (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
     authorities VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE,
-    created_at TIMESTAMP WITHOUT TIME ZONE
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 --INSERT INTO "user" (username, password, roles)
 --VALUES ('testuser', '$2a$10$FDp2CJ7TypXuD7OqZdByrOhLLz.xSoJDNYVUUeymNTzTER/dP4k8y', 'ROLE_USER');
 
 CREATE TABLE IF NOT EXISTS refresh_token (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     refresh_token VARCHAR(500) UNIQUE NOT NULL,
     username VARCHAR(255) NOT NULL,
     expiration_date TIMESTAMP WITHOUT TIME ZONE NOT NULL,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS refresh_token (
 
 -- 워크스페이스 테이블
 CREATE TABLE IF NOT EXISTS workspaces (
-    id BIGSERIAL PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     description TEXT,
     created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS workspaces (
 
 -- 워크스페이스 멤버십 테이블
 CREATE TABLE IF NOT EXISTS workspace_members (
-    id BIGSERIAL PRIMARY KEY,
-    workspace_id BIGINT REFERENCES workspaces(id) ON DELETE CASCADE,
-    user_id BIGINT REFERENCES "users"(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES "users"(id) ON DELETE CASCADE,
     role VARCHAR(20) NOT NULL CHECK (role IN ('owner', 'admin', 'member', 'guest')),
     joined_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(workspace_id, user_id)
@@ -45,9 +45,9 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 
 -- 페이지 테이블
 CREATE TABLE IF NOT EXISTS pages (
-    id BIGSERIAL PRIMARY KEY,
-    workspace_id BIGINT REFERENCES workspaces(id) ON DELETE CASCADE,
-    parent_page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    workspace_id UUID REFERENCES workspaces(id) ON DELETE CASCADE,
+    parent_page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     icon JSONB,
     cover JSONB,
@@ -63,52 +63,45 @@ CREATE TABLE IF NOT EXISTS pages (
 
 -- 페이지 권한 테이블
 CREATE TABLE IF NOT EXISTS page_permissions (
-    id BIGSERIAL PRIMARY KEY,
-    page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
-    user_id BIGINT REFERENCES "users"(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES "users"(id) ON DELETE CASCADE,
     permission VARCHAR(20) NOT NULL CHECK (permission IN ('read', 'comment', 'edit', 'full_access')),
     granted_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    granted_by BIGINT REFERENCES "users"(id) ON DELETE SET NULL,
+    granted_by UUID REFERENCES "users"(id) ON DELETE SET NULL,
     UNIQUE(page_id, user_id)
 );
 
 -- 블록 테이블
 CREATE TABLE IF NOT EXISTS blocks (
-    id BIGSERIAL PRIMARY KEY,
-    page_id BIGINT REFERENCES pages(id) ON DELETE CASCADE,
-    parent_block_id BIGINT REFERENCES blocks(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    page_id UUID REFERENCES pages(id) ON DELETE CASCADE,
+    parent_block_id UUID REFERENCES blocks(id) ON DELETE CASCADE,
     type VARCHAR(50) NOT NULL, -- paragraph, heading_1, heading_2, bulleted_list_item, etc.
     content JSONB NOT NULL, -- 블록별 고유한 콘텐츠
     position INTEGER NOT NULL, -- 같은 부모 내에서의 순서
     is_archived BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_by BIGINT REFERENCES "users"(id) ON DELETE SET NULL,
     last_edited_by BIGINT REFERENCES "users"(id) ON DELETE SET NULL
 );
 
 -- 인덱스 생성
--- workspace_members 인덱스
-CREATE INDEX idx_workspace_members_workspace_id ON workspace_members(workspace_id);
-CREATE INDEX idx_workspace_members_user_id ON workspace_members(user_id);
+-- 사용자 관련 인덱스
+CREATE INDEX idx_users_username ON users (username);
 
 -- pages 인덱스
-CREATE INDEX idx_pages_workspace_id ON pages(workspace_id);
-CREATE INDEX idx_pages_parent_page_id ON pages(parent_page_id);
+CREATE INDEX idx_pages_workspace ON pages (workspace_id, is_archived) WHERE is_archived = false;
+CREATE INDEX idx_pages_created_by ON pages (created_by);
 
 -- page_permissions 인덱스
-CREATE INDEX idx_page_permissions_page_id ON page_permissions(page_id);
-CREATE INDEX idx_page_permissions_user_id ON page_permissions(user_id);
+CREATE INDEX idx_page_permissions_page_id_user_id ON page_permissions(page_id, user_id);
 
 -- blocks 인덱스
-CREATE INDEX idx_blocks_page_id ON blocks(page_id);
-CREATE INDEX idx_blocks_parent_block_id ON blocks(parent_block_id);
-CREATE INDEX idx_blocks_position ON blocks(page_id, parent_block_id, position);
-
--- GIN 인덱스
-CREATE INDEX idx_blocks_content_gin ON blocks USING GIN (content);
-CREATE INDEX idx_pages_properties_gin ON pages USING GIN (properties);
-
+CREATE INDEX idx_blocks_page_id_is_archived_position ON blocks(page_id, is_archived, position);
+CREATE INDEX idx_blocks_parent_position ON blocks (parent_block_id, position)
+WHERE parent_block_id IS NOT NULL AND is_archived = false;
 
 
 

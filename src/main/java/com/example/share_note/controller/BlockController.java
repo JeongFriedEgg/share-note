@@ -17,8 +17,8 @@ public class BlockController {
 
     @PostMapping
     public Mono<ResponseEntity<BlockCreateResponseDto>> createBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
             @RequestBody BlockCreateRequestDto request) {
         return blockService.createBlock(workspaceId, pageId, request)
                 .map(response ->
@@ -27,26 +27,26 @@ public class BlockController {
 
     @GetMapping
     public Mono<ResponseEntity<BlockListResponseDto>> getBlocks(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId) {
         return blockService.getBlocks(workspaceId, pageId)
                 .map(ResponseEntity::ok);
     }
 
     @GetMapping("/{blockId}")
     public Mono<ResponseEntity<BlockResponseDto>> getBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long blockId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String blockId) {
         return blockService.getBlock(workspaceId, pageId, blockId)
                 .map(ResponseEntity::ok);
     }
 
     @PutMapping("/{blockId}")
     public Mono<ResponseEntity<BlockResponseDto>> updateBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long blockId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String blockId,
             @RequestBody BlockUpdateRequestDto request) {
         return blockService.updateBlock(workspaceId, pageId, blockId, request)
                 .map(ResponseEntity::ok);
@@ -54,9 +54,9 @@ public class BlockController {
 
     @PutMapping("/{blockId}/move")
     public Mono<ResponseEntity<BlockResponseDto>> moveBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long blockId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String blockId,
             @RequestBody BlockMoveRequestDto request) {
         return blockService.moveBlock(workspaceId, pageId, blockId, request)
                 .map(ResponseEntity::ok);
@@ -64,18 +64,18 @@ public class BlockController {
 
     @PutMapping("/{blockId}/archive")
     public Mono<ResponseEntity<BlockStatusResponseDto>> archiveBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long blockId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String blockId) {
         return blockService.archiveBlock(workspaceId, pageId, blockId)
                 .map(ResponseEntity::ok);
     }
 
     @PutMapping("/{blockId}/restore")
     public Mono<ResponseEntity<BlockStatusResponseDto>> restoreBlock(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long blockId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String blockId) {
         return blockService.restoreBlock(workspaceId, pageId, blockId)
                 .map(ResponseEntity::ok);
     }

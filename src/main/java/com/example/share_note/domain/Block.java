@@ -6,6 +6,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -15,13 +16,13 @@ import java.time.LocalDateTime;
 @Table(name = "blocks")
 public class Block {
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("page_id")
-    private Long pageId;
+    private UUID pageId;
 
     @Column("parent_block_id")
-    private Long parentBlockId;
+    private UUID parentBlockId;
 
     @Column("type")
     private String type;
@@ -42,8 +43,8 @@ public class Block {
     private LocalDateTime updatedAt;
 
     @Column("created_by")
-    private Long createdBy;
+    private UUID createdBy;
 
     @Column("last_edited_by")
-    private Long lastEditedBy;
+    private UUID lastEditedBy;
 }

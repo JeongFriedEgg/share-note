@@ -7,12 +7,12 @@ import lombok.Getter;
 @Getter
 @Builder
 public class PagePublicStatusUpdateResponseDto {
-    private Long pageId;
+    private String pageId;
     private Boolean isPublic;
 
     public static PagePublicStatusUpdateResponseDto from(Page page) {
         return PagePublicStatusUpdateResponseDto.builder()
-                .pageId(page.getId())
+                .pageId(page.getId().toString())
                 .isPublic(page.isPublic())
                 .build();
     }

@@ -7,12 +7,12 @@ import lombok.Getter;
 @Getter
 @Builder
 public class PageStatusResponseDto {
-    private Long pageId;
+    private String pageId;
     private Boolean isArchived;
 
     public static PageStatusResponseDto from(Page page) {
         return PageStatusResponseDto.builder()
-                .pageId(page.getId())
+                .pageId(page.getId().toString())
                 .isArchived(page.isArchived())
                 .build();
     }

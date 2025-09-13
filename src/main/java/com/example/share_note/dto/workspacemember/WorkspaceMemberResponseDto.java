@@ -14,17 +14,17 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class WorkspaceMemberResponseDto {
-    private Long id;
-    private Long workspaceId;
-    private Long userId;
+    private String id;
+    private String workspaceId;
+    private String userId;
     private WorkspaceRole role;
     private LocalDateTime joinedAt;
 
     public static WorkspaceMemberResponseDto from(WorkspaceMember member) {
         return WorkspaceMemberResponseDto.builder()
-                .id(member.getId())
-                .workspaceId(member.getWorkspaceId())
-                .userId(member.getUserId())
+                .id(member.getId().toString())
+                .workspaceId(member.getWorkspaceId().toString())
+                .userId(member.getUserId().toString())
                 .role(member.getRole())
                 .joinedAt(member.getJoinedAt())
                 .build();

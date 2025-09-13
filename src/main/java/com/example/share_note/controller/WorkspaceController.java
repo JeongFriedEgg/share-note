@@ -30,12 +30,11 @@ public class WorkspaceController {
     public Mono<ResponseEntity<WorkspaceUpdateResponseDto>> updateWorkspace(
             @RequestBody WorkspaceUpdateRequestDto request) {
         return workspaceService.updateWorkspace(request)
-                .map(response ->
-                        ResponseEntity.ok(response));
+                .map(ResponseEntity::ok);
     }
 
     @DeleteMapping("/{workspaceId}")
-    public Mono<ResponseEntity<Void>> deleteWorkspace(@PathVariable Long workspaceId) {
+    public Mono<ResponseEntity<Void>> deleteWorkspace(@PathVariable String workspaceId) {
         return workspaceService.deleteWorkspace(workspaceId)
                 .then(Mono.just(ResponseEntity.status(HttpStatus.NO_CONTENT).build()));
     }

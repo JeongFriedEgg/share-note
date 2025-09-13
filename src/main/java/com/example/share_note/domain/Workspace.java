@@ -6,6 +6,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -16,7 +17,7 @@ import java.time.LocalDateTime;
 public class Workspace {
 
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("name")
     private String name;
@@ -31,5 +32,5 @@ public class Workspace {
     private LocalDateTime updatedAt;
 
     @Column("created_by")
-    private Long createdBy;
+    private UUID createdBy;
 }

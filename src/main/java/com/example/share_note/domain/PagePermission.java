@@ -6,6 +6,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -15,13 +16,13 @@ import java.time.LocalDateTime;
 @Table(name = "page_permissions")
 public class PagePermission {
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("page_id")
-    private Long pageId;
+    private UUID pageId;
 
     @Column("user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column("permission")
     private String permission;
@@ -30,5 +31,5 @@ public class PagePermission {
     private LocalDateTime grantedAt;
 
     @Column("granted_by")
-    private Long grantedBy;
+    private UUID grantedBy;
 }

@@ -9,20 +9,26 @@ import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.ReactiveWorkspaceMemberRepository;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
+import com.example.share_note.util.UuidUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class WorkspaceMemberService {
     private final ReactiveWorkspaceMemberRepository reactiveWorkspaceMemberRepository;
     private final ReactiveWorkspaceRepository reactiveWorkspaceRepository;
+    private final UuidUtils uuidUtils;
 
-    public Mono<WorkspaceMemberResponseDto> inviteMember(Long workspaceId, WorkspaceMemberInviteRequestDto request) {
+    public Mono<WorkspaceMemberResponseDto> inviteMember(String workspaceIdStr, WorkspaceMemberInviteRequestDto request) {
+        UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
+        UUID userId = uuidUtils.fromString(request.getUserId());
+
         return getCurrentUserFromContext()
                 .flatMap(userDetails ->
                         reactiveWorkspaceRepository.findById(workspaceId)
@@ -33,14 +39,14 @@ public class WorkspaceMemberService {
                                                 return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                             }
                                             return reactiveWorkspaceMemberRepository
-                                                    .existsByWorkspaceIdAndUserId(workspaceId, request.getUserId())
+                                                    .existsByWorkspaceIdAndUserId(workspaceId, userId)
                                                     .flatMap(exists -> {
                                                         if (exists) {
                                                             return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_ALREADY_EXISTS));
                                                         }
                                                         WorkspaceMember newMember = WorkspaceMember.builder()
                                                                 .workspaceId(workspaceId)
-                                                                .userId(request.getUserId())
+                                                                .userId(userId)
                                                                 .role(request.getRole())
                                                                 .joinedAt(LocalDateTime.now())
                                                                 .build();
@@ -52,7 +58,9 @@ public class WorkspaceMemberService {
                 .map(WorkspaceMemberResponseDto::from);
     }
 
-    public Mono<WorkspaceMemberListResponseDto> getWorkspaceMembers(Long workspaceId) {
+    public Mono<WorkspaceMemberListResponseDto> getWorkspaceMembers(String workspaceIdStr) {
+        UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
+
         return getCurrentUserFromContext()
                 .flatMap(userDetails ->
                         checkMemberPermission(userDetails.getId(), workspaceId)
@@ -72,7 +80,9 @@ public class WorkspaceMemberService {
                 );
     }
 
-    public Mono<WorkspaceMemberResponseDto> updateMemberRole(Long workspaceId, WorkspaceMemberRoleUpdateRequestDto request) {
+    public Mono<WorkspaceMemberResponseDto> updateMemberRole(String workspaceIdStr, WorkspaceMemberRoleUpdateRequestDto request) {
+        UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
+
         return getCurrentUserFromContext()
                 .flatMap(userDetails ->
                         checkAdminPermission(userDetails.getId(), workspaceId)
@@ -81,7 +91,7 @@ public class WorkspaceMemberService {
                                         return Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_PERMISSION_DENIED));
                                     }
                                     return reactiveWorkspaceMemberRepository
-                                            .findByWorkspaceIdAndUserId(workspaceId, request.getUserId())
+                                            .findByWorkspaceIdAndUserId(workspaceId, uuidUtils.fromString(request.getUserId()))
                                             .switchIfEmpty(Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND)))
                                             .flatMap(existingMember -> {
                                                 if (existingMember.getRole() == WorkspaceRole.OWNER) {
@@ -103,7 +113,10 @@ public class WorkspaceMemberService {
                 .map(WorkspaceMemberResponseDto::from);
     }
 
-    public Mono<Void> removeMember(Long workspaceId, Long userId) {
+    public Mono<Void> removeMember(String workspaceIdStr, String userIdStr) {
+        UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
+        UUID userId = uuidUtils.fromString(userIdStr);
+
         return getCurrentUserFromContext()
                 .flatMap(currentUser ->
                         reactiveWorkspaceMemberRepository
@@ -132,7 +145,7 @@ public class WorkspaceMemberService {
                 .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal());
     }
 
-    private Mono<Boolean> checkAdminPermission(Long userId, Long workspaceId) {
+    private Mono<Boolean> checkAdminPermission(UUID userId, UUID workspaceId) {
         return reactiveWorkspaceRepository.findById(workspaceId)
                 .flatMap(workspace -> {
                     if (workspace.getCreatedBy().equals(userId)) {
@@ -145,7 +158,7 @@ public class WorkspaceMemberService {
                 });
     }
 
-    private Mono<Boolean> checkMemberPermission(Long userId, Long workspaceId) {
+    private Mono<Boolean> checkMemberPermission(UUID userId, UUID workspaceId) {
         return reactiveWorkspaceRepository.findById(workspaceId)
                 .flatMap(workspace -> {
                     if (workspace.getCreatedBy().equals(userId)) {

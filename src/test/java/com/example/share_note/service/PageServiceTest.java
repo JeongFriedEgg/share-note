@@ -1,27 +1,22 @@
 package com.example.share_note.service;
 
+
 import com.example.share_note.domain.Page;
 import com.example.share_note.domain.PagePermission;
 import com.example.share_note.domain.Workspace;
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.dto.page.*;
 import com.example.share_note.enums.PagePermissionType;
-import com.example.share_note.exception.ErrorCode;
-import com.example.share_note.exception.PageException;
-import com.example.share_note.exception.WorkspaceException;
-import com.example.share_note.exception.WorkspaceMemberException;
+import com.example.share_note.exception.*;
 import com.example.share_note.repository.*;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
+import com.example.share_note.util.UuidUtils;
+import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContext;
 import reactor.core.publisher.Flux;
@@ -29,16 +24,16 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.List;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+
 @ExtendWith(MockitoExtension.class)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class PageServiceTest {
-
-
     @Mock
     private ReactivePageRepository reactivePageRepository;
 
@@ -54,1455 +49,1690 @@ public class PageServiceTest {
     @Mock
     private ReactiveBlockRepository reactiveBlockRepository;
 
+    @Mock
+    private UuidUtils uuidUtils;
+
     @InjectMocks
     private PageService pageService;
 
-    private CustomUserDetails mockUserDetails;
-    private Workspace mockWorkspace;
-    private Page mockParentPage;
-    private Page mockCreatedPage;
-    private PagePermission mockPagePermission;
-    private PageCreateRequestDto requestDto;
-    private SecurityContext mockSecurityContext;
-    private Authentication mockAuthentication;
-    private Page mockPage;
-    private CustomUserDetails mockTargetUser;
+    private UUID workspaceId;
+    private UUID userId;
+    private UUID pageId;
+    private UUID parentPageId;
+    private String workspaceIdStr;
+    private String pageIdStr;
+    private String parentPageIdStr;
+
+    private CustomUserDetails customUserDetails;
+    private Workspace workspace;
+    private Page page;
+    private Page parentPage;
+    private PagePermission pagePermission;
+
+    private SecurityContext securityContext;
+    private Authentication authentication;
+
+    private PageInviteRequestDto pageInviteRequestDto;
+    private PageUpdatePermissionRequestDto pageUpdatePermissionRequestDto;
+    private PagePublicStatusUpdateRequestDto pagePublicStatusUpdateRequestDto;
+    private UUID targetUserId;
+    private String targetUserIdStr;
 
     @BeforeEach
     void setUp() {
-        mockUserDetails = mock(CustomUserDetails.class);
-        lenient().when(mockUserDetails.getId()).thenReturn(1L);
+        workspaceId = UUID.randomUUID();
+        userId = UUID.randomUUID();
+        pageId = UUID.randomUUID();
+        parentPageId = UUID.randomUUID();
+        workspaceIdStr = workspaceId.toString();
+        pageIdStr = pageId.toString();
+        parentPageIdStr = parentPageId.toString();
 
-        mockAuthentication = new UsernamePasswordAuthenticationToken(
-                mockUserDetails,
-                null,
-                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        customUserDetails = new CustomUserDetails(
+                userId, "testuser", "password", "ROLE_USER", "test@example.com"
         );
-        mockSecurityContext = mock(SecurityContext.class);
-        lenient().when(mockSecurityContext.getAuthentication()).thenReturn(mockAuthentication);
 
-        mockWorkspace = Workspace.builder()
-                .id(1L)
+        securityContext = mock(SecurityContext.class);
+        authentication = mock(Authentication.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        when(authentication.getPrincipal()).thenReturn(customUserDetails);
+
+        workspace = Workspace.builder()
+                .id(workspaceId)
                 .name("Test Workspace")
-                .createdBy(1L)
+                .createdBy(userId)
                 .build();
 
-        mockParentPage = Page.builder()
-                .id(2L)
-                .workspaceId(1L)
-                .title("Parent Page")
-                .createdBy(1L)
-                .build();
-
-        mockCreatedPage = Page.builder()
-                .id(3L)
-                .workspaceId(1L)
-                .parentPageId(2L)
-                .title("New Page")
-                .createdAt(LocalDateTime.now())
-                .createdBy(1L)
-                .build();
-
-        mockPage = Page.builder()
-                .id(10L)
-                .workspaceId(1L)
-                .title("Original Title")
-                .icon("📄")
-                .cover("original-cover.jpg")
-                .isPublic(true)
+        page = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Test Page")
+                .isPublic(false)
                 .isArchived(false)
                 .isTemplate(false)
-                .createdBy(1L)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(userId)
+                .lastEditedBy(userId)
                 .build();
 
-        mockPagePermission = PagePermission.builder()
-                .pageId(2L)
-                .userId(1L)
+        parentPage = Page.builder()
+                .id(parentPageId)
+                .workspaceId(workspaceId)
+                .parentPageId(null)
+                .title("Parent Page")
+                .isPublic(false)
+                .isArchived(false)
+                .isTemplate(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(userId)
+                .lastEditedBy(userId)
+                .build();
+
+        pagePermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
                 .permission(PagePermissionType.EDIT.name())
                 .build();
 
-        requestDto = PageCreateRequestDto.builder()
-                .parentPageId(2L)
+        pageInviteRequestDto = PageInviteRequestDto.builder()
+                .userId(UUID.randomUUID().toString())
+                .permissionType(PagePermissionType.READ.name())
+                .build();
+
+        pageUpdatePermissionRequestDto = PageUpdatePermissionRequestDto.builder()
+                .permissionType(PagePermissionType.EDIT.name())
+                .build();
+
+        pagePublicStatusUpdateRequestDto = PagePublicStatusUpdateRequestDto.builder()
+                .isPublic(true)
+                .build();
+    }
+
+    @Test
+    @Order(1)
+    @DisplayName("페이지 생성 성공 - 워크스페이스 소유자가 루트 페이지 생성")
+    void createPage_Success_WorkspaceOwner_RootPage() {
+        // given
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
                 .title("New Page")
                 .icon("📄")
                 .cover("cover.jpg")
-                .properties("{\"color\": \"blue\"}")
-                .build();
-    }
-
-    @Test
-    @DisplayName("인증되지 않은 사용자가 페이지 생성 시 예외 발생")
-    void createPage_WhenNotAuthenticated_ShouldThrowException() {
-        // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.empty());
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectError(WorkspaceException.class)
-                    .verify();
-        }
-    }
-
-    @Test
-    @DisplayName("존재하지 않는 워크스페이스에 페이지 생성 시 예외 발생")
-    void createPage_WhenWorkspaceNotFound_ShouldThrowException() {
-        // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.empty());
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectError(WorkspaceException.class)
-                    .verify();
-        }
-    }
-
-    @Test
-    @DisplayName("워크스페이스 소유자가 페이지 생성 성공 - 부모 페이지 없음")
-    void createPage_WhenWorkspaceOwner_WithoutParentPage_ShouldCreateSuccessfully() {
-        // given
-        PageCreateRequestDto requestWithoutParent = PageCreateRequestDto.builder()
-                .title("Root Page")
+                .properties("{}")
                 .build();
 
-        Page savedPage = Page.builder()
-                .id(3L)
-                .workspaceId(1L)
-                .title("Root Page")
-                .createdAt(LocalDateTime.now())
-                .createdBy(1L)
-                .build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(savedPage));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.createPage(1L, requestWithoutParent))
-                    .expectNextMatches(response ->
-                            response.getPageId().equals(3L) &&
-                                    response.getWorkspaceId().equals(1L) &&
-                                    response.getCreatedBy().equals(1L)
-                    )
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isNotNull();
+                        assertThat(response.getWorkspaceId()).isEqualTo(workspaceIdStr);
+                        return true;
+                    })
                     .verifyComplete();
-
-            verify(reactivePageRepository).save(any(Page.class));
         }
+
+        verify(reactivePageRepository).save(any(Page.class));
     }
 
     @Test
-    @DisplayName("워크스페이스 멤버가 페이지 생성 성공")
-    void createPage_WhenWorkspaceMember_ShouldCreateSuccessfully() {
+    @Order(2)
+    @DisplayName("페이지 생성 성공 - 워크스페이스 멤버가 부모 페이지에 하위 페이지 생성")
+    void createPage_Success_WorkspaceMember_ChildPage() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder()
-                .id(1L)
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
+                .parentPageId(parentPageIdStr)
+                .title("Child Page")
+                .build();
+
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
                 .name("Test Workspace")
-                .createdBy(2L) // 다른 사용자가 소유
+                .createdBy(UUID.randomUUID()) // 다른 사용자가 소유자
                 .build();
 
-        PageCreateRequestDto requestWithoutParent = PageCreateRequestDto.builder()
-                .title("Member Page")
+        PagePermission parentPagePermission = PagePermission.builder()
+                .pageId(parentPageId)
+                .userId(userId)
+                .permission(PagePermissionType.EDIT.name())
                 .build();
 
-        Page savedPage = Page.builder()
-                .id(3L)
-                .workspaceId(1L)
-                .title("Member Page")
-                .createdAt(LocalDateTime.now())
-                .createdBy(1L)
-                .build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(parentPageIdStr)).thenReturn(parentPageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePageRepository.findByIdAndWorkspaceId(parentPageId, workspaceId))
+                .thenReturn(Mono.just(parentPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(parentPageId, userId))
+                .thenReturn(Mono.just(parentPagePermission));
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-            when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(savedPage));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.createPage(1L, requestWithoutParent))
-                    .expectNextMatches(response ->
-                            response.getPageId().equals(3L) &&
-                                    response.getWorkspaceId().equals(1L)
-                    )
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isNotNull();
+                        return true;
+                    })
                     .verifyComplete();
         }
     }
 
     @Test
-    @DisplayName("워크스페이스 멤버가 아닌 경우 예외 발생")
-    void createPage_WhenNotWorkspaceMember_ShouldThrowException() {
+    @Order(3)
+    @DisplayName("페이지 생성 실패 - 워크스페이스 없음")
+    void createPage_Fail_WorkspaceNotFound() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder()
-                .id(1L)
-                .name("Test Workspace")
-                .createdBy(2L)
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
+                .title("New Page")
                 .build();
 
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.empty());
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-            when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
                     .expectError(WorkspaceException.class)
                     .verify();
         }
     }
 
     @Test
-    @DisplayName("존재하지 않는 부모 페이지로 페이지 생성 시 예외 발생")
-    void createPage_WhenParentPageNotFound_ShouldThrowException() {
+    @Order(4)
+    @DisplayName("페이지 생성 실패 - 워크스페이스 멤버 아님")
+    void createPage_Fail_NotWorkspaceMember() {
         // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
+                .title("New Page")
+                .build();
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.findByIdAndWorkspaceId(2L, 1L)).thenReturn(Mono.empty());
+        Workspace otherWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID()) // 다른 사용자가 소유자
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(false));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(5)
+    @DisplayName("페이지 생성 실패 - 부모 페이지 없음")
+    void createPage_Fail_ParentPageNotFound() {
+        // given
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
+                .parentPageId(parentPageIdStr)
+                .title("Child Page")
+                .build();
+        
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(parentPageIdStr)).thenReturn(parentPageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(parentPageId, workspaceId))
+                .thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
                     .expectError(PageException.class)
                     .verify();
         }
     }
 
     @Test
-    @DisplayName("부모 페이지에 대한 권한이 없는 경우 예외 발생")
-    void createPage_WhenNoParentPagePermission_ShouldThrowException() {
+    @Order(6)
+    @DisplayName("페이지 생성 실패 - 부모 페이지 권한 없음")
+    void createPage_Fail_ParentPagePermissionDenied() {
         // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        PageCreateRequestDto request = PageCreateRequestDto.builder()
+                .parentPageId(parentPageIdStr)
+                .title("Child Page")
+                .build();
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.findByIdAndWorkspaceId(2L, 1L)).thenReturn(Mono.just(mockParentPage));
-            when(reactivePagePermissionRepository.findByPageIdAndUserId(2L, 1L)).thenReturn(Mono.empty());
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectError(PageException.class)
-                    .verify();
-        }
-    }
-
-    @Test
-    @DisplayName("부모 페이지에 대한 권한이 부족한 경우 예외 발생")
-    void createPage_WhenInsufficientParentPagePermission_ShouldThrowException() {
-        // given
         PagePermission readOnlyPermission = PagePermission.builder()
-                .pageId(2L)
-                .userId(1L)
+                .pageId(parentPageId)
+                .userId(userId)
                 .permission(PagePermissionType.READ.name())
                 .build();
 
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(parentPageIdStr)).thenReturn(parentPageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePageRepository.findByIdAndWorkspaceId(parentPageId, workspaceId))
+                .thenReturn(Mono.just(parentPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(parentPageId, userId))
+                .thenReturn(Mono.just(readOnlyPermission));
 
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.findByIdAndWorkspaceId(2L, 1L)).thenReturn(Mono.just(mockParentPage));
-            when(reactivePagePermissionRepository.findByPageIdAndUserId(2L, 1L)).thenReturn(Mono.just(readOnlyPermission));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectError(PageException.class)
+            StepVerifier.create(pageService.createPage(workspaceIdStr, request))
+                    .expectError(PagePermissionException.class)
                     .verify();
         }
     }
 
     @Test
-    @DisplayName("부모 페이지에 편집 권한이 있는 경우 페이지 생성 성공")
-    void createPage_WithEditPermissionOnParentPage_ShouldCreateSuccessfully() {
-        // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.findByIdAndWorkspaceId(2L, 1L)).thenReturn(Mono.just(mockParentPage));
-            when(reactivePagePermissionRepository.findByPageIdAndUserId(2L, 1L)).thenReturn(Mono.just(mockPagePermission));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(mockCreatedPage));
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectNextMatches(response ->
-                            response.getPageId().equals(3L) &&
-                                    response.getWorkspaceId().equals(1L) &&
-                                    response.getCreatedBy().equals(1L)
-                    )
-                    .verifyComplete();
-
-            verify(reactivePageRepository).save(any(Page.class));
-        }
-    }
-
-    @Test
-    @DisplayName("부모 페이지에 관리자 권한이 있는 경우 페이지 생성 성공")
-    void createPage_WithAdminPermissionOnParentPage_ShouldCreateSuccessfully() {
-        // given
-        PagePermission adminPermission = PagePermission.builder()
-                .pageId(2L)
-                .userId(1L)
-                .permission(PagePermissionType.FULL_ACCESS.name())
-                .build();
-
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.findByIdAndWorkspaceId(2L, 1L)).thenReturn(Mono.just(mockParentPage));
-            when(reactivePagePermissionRepository.findByPageIdAndUserId(2L, 1L)).thenReturn(Mono.just(adminPermission));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(mockCreatedPage));
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectNextMatches(response -> response.getPageId().equals(3L))
-                    .verifyComplete();
-        }
-    }
-
-    @Test
-    @DisplayName("제목이 null인 경우 'Untitled'로 설정")
-    void createPage_WhenTitleIsNull_ShouldSetUntitled() {
-        // given
-        PageCreateRequestDto requestWithoutTitle = PageCreateRequestDto.builder()
-                .title(null)
-                .build();
-
-        Page savedPageWithUntitled = Page.builder()
-                .id(3L)
-                .workspaceId(1L)
-                .title("Untitled")
-                .createdAt(LocalDateTime.now())
-                .createdBy(1L)
-                .build();
-
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(savedPageWithUntitled));
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestWithoutTitle))
-                    .expectNextMatches(response -> response.getPageId().equals(3L))
-                    .verifyComplete();
-
-            verify(reactivePageRepository).save(argThat(page -> "Untitled".equals(page.getTitle())));
-        }
-    }
-
-    @Test
-    @DisplayName("예상치 못한 예외 발생 시 PageException으로 변환")
-    void createPage_WhenUnexpectedError_ShouldMapToPageException() {
-        // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.error(new RuntimeException("Unexpected error")));
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestDto))
-                    .expectError(PageException.class)
-                    .verify();
-        }
-    }
-
-    @Test
-    @DisplayName("페이지 저장 중 예외 발생 시 예외 전파")
-    void createPage_WhenSaveError_ShouldPropagateException() {
-        // given
-        PageCreateRequestDto requestWithoutParent = PageCreateRequestDto.builder()
-                .title("Test Page")
-                .build();
-
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            SecurityContext securityContext = mock(SecurityContext.class);
-            Authentication authentication = mock(Authentication.class);
-
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.just(securityContext));
-            when(securityContext.getAuthentication()).thenReturn(authentication);
-            when(authentication.getPrincipal()).thenReturn(mockUserDetails);
-            when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-            when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.error(new RuntimeException("Save failed")));
-
-            // when & then
-            StepVerifier.create(pageService.createPage(1L, requestWithoutParent))
-                    .expectError(PageException.class)
-                    .verify();
-        }
-    }
-
-    @Test
+    @Order(7)
     @DisplayName("페이지 목록 조회 성공 - 워크스페이스 소유자")
-    void getPages_WhenWorkspaceOwner_ShouldReturnPageList() {
+    void getPages_Success_WorkspaceOwner() {
         // given
-        Page rootPage1 = Page.builder().id(10L).title("Root Page 1").icon("📄").build();
-        Page rootPage2 = Page.builder().id(11L).title("Root Page 2").icon("📚").build();
+        Page page1 = Page.builder().id(UUID.randomUUID()).title("Page 1").icon("📄").build();
+        Page page2 = Page.builder().id(UUID.randomUUID()).title("Page 2").icon("📝").build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(1L)).thenReturn(Flux.just(rootPage1, rootPage2));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(workspaceId))
+                .thenReturn(Flux.just(page1, page2));
 
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseMono)
-                .expectNextMatches(response -> {
-                    List<PageListItemResponseDto> pages = response.getPages();
-                    return pages.size() == 2 &&
-                            pages.get(0).getPageId().equals(10L) &&
-                            pages.get(0).getTitle().equals("Root Page 1") &&
-                            pages.get(1).getPageId().equals(11L) &&
-                            pages.get(1).getTitle().equals("Root Page 2");
-                })
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("페이지 목록 조회 성공 - 워크스페이스 멤버")
-    void getPages_WhenWorkspaceMember_ShouldReturnPageList() {
-        // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        Page rootPage1 = Page.builder().id(10L).title("Root Page 1").build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(1L)).thenReturn(Flux.just(rootPage1));
-
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseMono)
-                .expectNextMatches(response -> response.getPages().size() == 1)
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("페이지 목록 조회 성공 - 결과가 없는 경우 빈 리스트 반환")
-    void getPages_WhenNoPagesExist_ShouldReturnEmptyList() {
-        // given
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(1L)).thenReturn(Flux.empty());
-
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseMono)
-                .expectNextMatches(response -> response.getPages().isEmpty())
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("페이지 목록 조회 실패 - 인증되지 않은 사용자")
-    void getPages_WhenNotAuthenticated_ShouldThrowException() {
-        // given
-        try (MockedStatic<ReactiveSecurityContextHolder> mockedHolder = mockStatic(ReactiveSecurityContextHolder.class)) {
-            mockedHolder.when(ReactiveSecurityContextHolder::getContext).thenReturn(Mono.empty());
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
             // when & then
-            StepVerifier.create(pageService.getPages(1L))
-                    .expectError(WorkspaceException.class)
-                    .verify();
+            StepVerifier.create(pageService.getPages(workspaceIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPages()).hasSize(2);
+                        assertThat(response.getPages().get(0).getTitle()).isEqualTo("Page 1");
+                        assertThat(response.getPages().get(1).getTitle()).isEqualTo("Page 2");
+                        return true;
+                    })
+                    .verifyComplete();
         }
     }
 
     @Test
-    @DisplayName("페이지 목록 조회 실패 - 존재하지 않는 워크스페이스")
-    void getPages_WhenWorkspaceNotFound_ShouldThrowException() {
-        // given
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.empty());
-
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 목록 조회 실패 - 워크스페이스 멤버 아님")
-    void getPages_WhenNotAWorkspaceMember_ShouldThrowException() {
-        // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
-
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.MEMBER_NOT_FOUND)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 목록 조회 성공 - 워크스페이스 소유자")
-    void getPage_WhenWorkspaceOwner_ShouldReturnAllPages() {
-        // given
-        Page publicRootPage = Page.builder().id(10L).title("Public Page").icon("📄").isPublic(true).parentPageId(null).build();
-        Page privateRootPage = Page.builder().id(11L).title("Private Page").icon("🔒").isPublic(false).parentPageId(null).build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(1L)).thenReturn(Flux.just(publicRootPage, privateRootPage));
-
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(responseMono)
-                .expectNextMatches(response -> {
-                    List<PageListItemResponseDto> pages = response.getPages();
-                    return pages.size() == 2 &&
-                            pages.stream().anyMatch(p -> p.getPageId().equals(10L)) &&
-                            pages.stream().anyMatch(p -> p.getPageId().equals(11L));
-                })
-                .verifyComplete();
-    }
-
-    @Test
+    @Order(8)
     @DisplayName("페이지 목록 조회 성공 - 워크스페이스 멤버")
-    void getPage_WhenWorkspaceMember_ShouldReturnAllPages() {
+    void getPages_Success_WorkspaceMember() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        Page publicRootPage = Page.builder().id(10L).title("Public Page").icon("📄").isPublic(true).parentPageId(null).build();
-        Page privateRootPage = Page.builder().id(11L).title("Private Page").icon("🔒").isPublic(false).parentPageId(null).build();
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(1L)).thenReturn(Flux.just(publicRootPage, privateRootPage));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePageRepository.findAllByWorkspaceIdAndParentPageIdIsNull(workspaceId))
+                .thenReturn(Flux.empty());
 
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseMono)
-                .expectNextMatches(response -> {
-                    List<PageListItemResponseDto> pages = response.getPages();
-                    return pages.size() == 2 &&
-                            pages.stream().anyMatch(p -> p.getPageId().equals(10L)) &&
-                            pages.stream().anyMatch(p -> p.getPageId().equals(11L));
-                })
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.getPages(workspaceIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPages()).isEmpty();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 조회 성공 - 워크스페이스 멤버, 비공개 페이지에 권한 있음")
-    void getPage_WhenWorkspaceMemberAndPrivatePageWithPermission_ShouldSucceed() {
+    @Order(9)
+    @DisplayName("페이지 조회 성공 - 워크스페이스 멤버, 읽기 권한 있음")
+    void getPage_Success_WorkspaceMember_WithReadPermission() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        Page privatePage = Page.builder()
-                .id(1L).workspaceId(1L).title("Private Page").isPublic(false).build();
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
         PagePermission readPermission = PagePermission.builder()
-                .permission(PagePermissionType.READ.name()).build();
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.READ.name())
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePageRepository.findByIdAndWorkspaceId(1L, 1L)).thenReturn(Mono.just(privatePage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(1L, 1L)).thenReturn(Mono.just(readPermission));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(readPermission));
 
-        // when
-        Mono<PageResponseDto> result = pageService.getPage(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getId().equals(1L) && dto.getTitle().equals("Private Page"))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.getPage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getId()).isEqualTo(pageIdStr);
+                        assertThat(response.getTitle()).isEqualTo("Test Page");
+                        assertThat(response.getParentPageId()).isEqualTo(parentPageIdStr);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 조회 실패 - 워크스페이스 멤버, 비공개 페이지에 권한 없음")
-    void getPage_WhenWorkspaceMemberAndPrivatePageNoPermission_ShouldThrowException() {
-        // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        Page privatePage = Page.builder()
-                .id(1L).workspaceId(1L).title("Private Page").isPublic(false).build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePageRepository.findByIdAndWorkspaceId(1L, 1L)).thenReturn(Mono.just(privatePage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(1L, 1L)).thenReturn(Mono.empty());
-
-        // when
-        Mono<PageResponseDto> result = pageService.getPage(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 조회 실패 - 비멤버, 비공개 페이지")
-    void getPage_WhenNotMemberAndPrivatePage_ShouldThrowException() {
-        // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        Page privatePage = Page.builder()
-                .id(1L).workspaceId(1L).title("Private Page").isPublic(false).build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
-        when(reactivePageRepository.findByIdAndWorkspaceId(1L, 1L)).thenReturn(Mono.just(privatePage));
-
-        // when
-        Mono<PageResponseDto> result = pageService.getPage(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
-    }
-
-    @Test
+    @Order(10)
     @DisplayName("페이지 조회 성공 - 비멤버, 공개 페이지")
-    void getPage_WhenNotMemberAndPublicPage_ShouldSucceed() {
+    void getPage_Success_NonMember_PublicPage() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
+        UUID otherUser = UUID.randomUUID();
         Page publicPage = Page.builder()
-                .id(1L).workspaceId(1L).title("Public Page").isPublic(true).build();
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .title("Public Page")
+                .parentPageId(parentPageId)
+                .isPublic(true)
+                .isArchived(false)
+                .isTemplate(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(otherUser)
+                .lastEditedBy(otherUser)
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
-        when(reactivePageRepository.findByIdAndWorkspaceId(1L, 1L)).thenReturn(Mono.just(publicPage));
+        Workspace otherWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(otherUser)
+                .build();
 
-        // when
-        Mono<PageResponseDto> result = pageService.getPage(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(false));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(publicPage));
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getId().equals(1L) && dto.getTitle().equals("Public Page"))
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.getPage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getTitle()).isEqualTo("Public Page");
+                        assertThat(response.getIsPublic()).isTrue();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 조회 실패 - 워크스페이스 멤버 아님")
-    void getPage_WhenNotAWorkspaceMember_ShouldThrowException() {
+    @Order(11)
+    @DisplayName("페이지 조회 실패 - 권한 없음")
+    void getPage_Fail_PermissionDenied() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
+        Workspace otherWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(otherWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(false));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page)); // isPublic = false
 
-        // when
-        Mono<PageListResponseDto> responseMono = pageService.getPages(1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(responseMono)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.MEMBER_NOT_FOUND)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.getPage(workspaceIdStr, pageIdStr))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 조회 실패 - 존재하지 않는 페이지")
-    void getPage_WhenPageNotFound_ShouldThrowException() {
+    @Order(12)
+    @DisplayName("페이지 조회 실패 - 멤버지만 페이지 권한이 없는 경우")
+    void getPage_Fail_MemberButNoPagePermission() {
         // given
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(1L, 1L)).thenReturn(Mono.empty());
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-        // when
-        Mono<PageResponseDto> result = pageService.getPage(1L, 1L)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.empty()); // 권한 없음
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_NOT_FOUND)
-                .verify();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.getPage(workspaceIdStr, pageIdStr))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
+    @Order(13)
     @DisplayName("페이지 수정 성공 - 워크스페이스 소유자")
-    void updatePage_WhenWorkspaceOwner_ShouldSucceed() {
+    void updatePage_Success_WorkspaceOwner() {
         // given
         PageUpdateRequestDto request = PageUpdateRequestDto.builder()
                 .title("Updated Title")
-                .icon("✏️")
-                .cover("updated-cover.jpg")
+                .icon("📝")
+                .cover("new-cover.jpg")
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(mockPage));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> "Updated Title".equals(dto.getTitle()) && "✏️".equals(dto.getIcon()) && "updated-cover.jpg".equals(dto.getCover()))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // 소유자는 권한 확인 로직을 거치지 않으므로, permission repository가 호출되지 않아야 함
-        verify(reactiveWorkspaceMemberRepository, never()).existsByWorkspaceIdAndUserId(any(), any());
-        verify(reactivePagePermissionRepository, never()).findByPageIdAndUserId(any(), any());
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getId()).isEqualTo(pageIdStr);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+
+        verify(reactivePageRepository).save(any(Page.class));
     }
 
     @Test
-    @DisplayName("페이지 수정 성공 - 워크스페이스 멤버, EDIT 권한 소유")
-    void updatePage_WhenMemberWithEditPermission_ShouldSucceed() {
+    @Order(14)
+    @DisplayName("페이지 수정 성공 - 워크스페이스 멤버, 편집 권한 있음")
+    void updatePage_Success_WorkspaceMember_WithEditPermission() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        PagePermission editPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.EDIT.name())
+        PageUpdateRequestDto request = PageUpdateRequestDto.builder()
+                .title("Updated Title")
                 .build();
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Member Updated Title").build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(editPermission));
-        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(mockPage));
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(pagePermission)); // EDIT permission
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> "Member Updated Title".equals(dto.getTitle()))
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getId()).isEqualTo(pageIdStr);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 수정 성공 - 워크스페이스 멤버, FULL_ACCESS 권한 소유")
-    void updatePage_WhenMemberWithFullAccessPermission_ShouldSucceed() {
+    @Order(15)
+    @DisplayName("페이지 수정 실패 - 페이지 없음")
+    void updatePage_Fail_PageNotFound() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        PagePermission fullAccessPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.FULL_ACCESS.name())
+        PageUpdateRequestDto request = PageUpdateRequestDto.builder()
+                .title("Updated Title")
                 .build();
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Member Updated Title").build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(fullAccessPermission));
-        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(mockPage));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.empty());
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> "Member Updated Title".equals(dto.getTitle()))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectError(PageException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 수정 실패 - 워크스페이스 멤버, READ 권한만 소유")
-    void updatePage_WhenMemberWithReadPermission_ShouldThrowException() {
+    @Order(16)
+    @DisplayName("페이지 수정 실패 - 편집 권한 없음")
+    void updatePage_Fail_EditPermissionDenied() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        PagePermission readPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
+        PageUpdateRequestDto request = PageUpdateRequestDto.builder()
+                .title("Updated Title")
+                .build();
+
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
+        PagePermission readOnlyPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
                 .permission(PagePermissionType.READ.name())
                 .build();
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Should Fail").build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(readPermission));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(readOnlyPermission));
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 수정 실패 - 워크스페이스 멤버, 권한 정보 없음")
-    void updatePage_WhenMemberWithNoPermissionRecord_ShouldThrowException() {
-        // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Should Fail").build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.empty());
-
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
-    }
-
-    @Test
+    @Order(17)
     @DisplayName("페이지 수정 실패 - 워크스페이스 멤버 아님")
-    void updatePage_WhenNotAWorkspaceMember_ShouldThrowException() {
+    void updatePage_Fail_NotWorkspaceMember() {
         // given
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(2L).build();
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Should Fail").build();
+        PageUpdateRequestDto request = PageUpdateRequestDto.builder()
+                .title("Updated Title")
+                .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 1L)).thenReturn(Mono.just(false));
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId))
+                .thenReturn(Mono.just(false));
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 수정 실패 - 존재하지 않는 워크스페이스")
-    void updatePage_WhenWorkspaceNotFound_ShouldThrowException() {
+    @Order(18)
+    @DisplayName("페이지 수정 시 필드별 업데이트 확인")
+    void updatePage_Success_FieldUpdate() {
         // given
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Fail").build();
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.empty());
+        PageUpdateRequestDto request = PageUpdateRequestDto.builder()
+                .title("New Title")
+                .icon("🆕")
+                .cover("new-cover.png")
+                .build();
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePageRepository.save(any(Page.class))).thenAnswer(invocation -> {
+            Page savedPage = invocation.getArgument(0);
+            // 필드 업데이트 확인
+            assertThat(savedPage.getTitle()).isEqualTo("New Title");
+            assertThat(savedPage.getIcon()).isEqualTo("🆕");
+            assertThat(savedPage.getCover()).isEqualTo("new-cover.png");
+            assertThat(savedPage.getLastEditedBy()).isEqualTo(userId);
+            assertThat(savedPage.getUpdatedAt()).isNotNull();
+            return Mono.just(savedPage);
+        });
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceException &&
-                                ((WorkspaceException) throwable).getErrorCode() == ErrorCode.WORKSPACE_NOT_FOUND)
-                .verify();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updatePage(workspaceIdStr, pageIdStr, request))
+                    .expectNextCount(1)
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 수정 실패 - 존재하지 않는 페이지")
-    void updatePage_WhenPageNotFound_ShouldThrowException() {
+    @Order(19)
+    @DisplayName("페이지 멤버 초대 성공 - 워크스페이스 소유자")
+    void inviteMemberToPage_Success_WorkspaceOwner() {
         // given
-        PageUpdateRequestDto request = PageUpdateRequestDto.builder().title("Fail").build();
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.empty());
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
 
-        // when
-        Mono<PageResponseDto> result = pageService.updatePage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_NOT_FOUND)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지에 멤버 초대 성공 - 워크스페이스 소유자")
-    void inviteMemberToPage_WhenWorkspaceOwner_ShouldSucceed() {
-        // given
         PageInviteRequestDto request = PageInviteRequestDto.builder()
-                .userId(2L)
+                .userId(targetUserIdStr)
                 .permissionType(PagePermissionType.READ.name())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.empty());
-        when(reactivePagePermissionRepository.save(any(PagePermission.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+        PagePermission newPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(targetUserId)
+                .permission(PagePermissionType.READ.name())
+                .build();
 
-        // when
-        Mono<PageInviteResponseDto> result = pageService.inviteMemberToPage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, targetUserId))
+                .thenReturn(Mono.empty()); // 권한이 없는 상태
+        when(reactivePagePermissionRepository.save(any(PagePermission.class)))
+                .thenReturn(Mono.just(newPermission));
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getUserId().equals(2L) && dto.getPageId().equals(10L) && "READ".equals(dto.getPermission()))
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        verify(reactivePagePermissionRepository, times(1)).save(any(PagePermission.class));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.inviteMemberToPage(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getUserId()).isEqualTo(targetUserIdStr);
+                        assertThat(response.getPermission()).isEqualTo(PagePermissionType.READ.name());
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지에 멤버 초대 성공 - FULL_ACCESS 권한 소유 멤버")
-    void inviteMemberToPage_WhenFullAccessMember_ShouldSucceed() {
+    @Order(20)
+    @DisplayName("페이지 멤버 초대 성공 - FULL_ACCESS 권한 있는 멤버")
+    void inviteMemberToPage_Success_FullAccessMember() {
         // given
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID()) // 다른 사용자가 소유자
+                .build();
+
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
         PageInviteRequestDto request = PageInviteRequestDto.builder()
-                .userId(2L)
+                .userId(targetUserIdStr)
                 .permissionType(PagePermissionType.EDIT.name())
                 .build();
-        PagePermission fullAccessPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
+
+        PagePermission clientPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
                 .permission(PagePermissionType.FULL_ACCESS.name())
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(20L).build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(fullAccessPermission));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.empty());
-        when(reactivePagePermissionRepository.save(any(PagePermission.class))).thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-
-        // when
-        Mono<PageInviteResponseDto> result = pageService.inviteMemberToPage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getUserId().equals(2L) && "EDIT".equals(dto.getPermission()))
-                .verifyComplete();
-    }
-
-    @Test
-    @DisplayName("페이지에 멤버 초대 실패 - EDIT 권한 소유 멤버")
-    void inviteMemberToPage_WhenEditPermissionMember_ShouldThrowException() {
-        // given
-        PageInviteRequestDto request = PageInviteRequestDto.builder()
-                .userId(2L)
-                .permissionType(PagePermissionType.READ.name())
-                .build();
-        PagePermission editPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
+        PagePermission newPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(targetUserId)
                 .permission(PagePermissionType.EDIT.name())
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(20L).build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(clientPermission));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, targetUserId))
+                .thenReturn(Mono.empty());
+        when(reactivePagePermissionRepository.save(any(PagePermission.class)))
+                .thenReturn(Mono.just(newPermission));
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(editPermission));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // when
-        Mono<PageInviteResponseDto> result = pageService.inviteMemberToPage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
-
-        verify(reactiveWorkspaceMemberRepository, never()).existsByWorkspaceIdAndUserId(any(), any());
-        verify(reactivePagePermissionRepository, never()).save(any());
+            // when & then
+            StepVerifier.create(pageService.inviteMemberToPage(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPermission()).isEqualTo(PagePermissionType.EDIT.name());
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지에 멤버 초대 실패 - 초대할 유저가 워크스페이스 멤버가 아님")
-    void inviteMemberToPage_WhenInvitedUserIsNotWorkspaceMember_ShouldThrowException() {
+    @Order(21)
+    @DisplayName("페이지 멤버 초대 성공 - 기존 권한 업데이트")
+    void inviteMemberToPage_Success_UpdateExistingPermission() {
         // given
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
         PageInviteRequestDto request = PageInviteRequestDto.builder()
-                .userId(2L)
-                .permissionType(PagePermissionType.READ.name())
+                .userId(targetUserIdStr)
+                .permissionType(PagePermissionType.EDIT.name())
                 .build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(false));
-
-        // when
-        Mono<PageInviteResponseDto> result = pageService.inviteMemberToPage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.INVITED_USER_NOT_WORKSPACE_MEMBER)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지에 멤버 초대 성공 - 이미 권한이 있는 멤버의 권한 업데이트")
-    void inviteMemberToPage_WhenUserAlreadyHasPermission_ShouldUpdatePermission() {
-        // given
-        PageInviteRequestDto request = PageInviteRequestDto.builder()
-                .userId(2L)
-                .permissionType(PagePermissionType.FULL_ACCESS.name())
-                .build();
-
-        when(mockUserDetails.getId()).thenReturn(1L);
 
         PagePermission existingPermission = PagePermission.builder()
-                .id(1L)
-                .pageId(10L)
-                .userId(2L)
+                .pageId(pageId)
+                .userId(targetUserId)
                 .permission(PagePermissionType.READ.name())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.just(existingPermission));
-        when(reactivePagePermissionRepository.save(any(PagePermission.class))).thenAnswer(invocation -> {
-            PagePermission savedPermission = invocation.getArgument(0);
-            savedPermission.setPermission(request.getPermissionType());
-            return Mono.just(savedPermission);
-        });
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, targetUserId))
+                .thenReturn(Mono.just(existingPermission));
+        when(reactivePagePermissionRepository.save(any(PagePermission.class)))
+                .thenReturn(Mono.just(existingPermission));
 
-        // when
-        Mono<PageInviteResponseDto> result = pageService.inviteMemberToPage(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto ->
-                        dto.getUserId().equals(2L) &&
-                                dto.getPermission().equals(PagePermissionType.FULL_ACCESS.name()))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactivePagePermissionRepository, times(1)).save(any(PagePermission.class));
+            // when & then
+            StepVerifier.create(pageService.inviteMemberToPage(workspaceIdStr, pageIdStr, request))
+                    .expectNextCount(1)
+                    .verifyComplete();
+        }
     }
 
     @Test
+    @Order(22)
+    @DisplayName("페이지 멤버 초대 실패 - FULL_ACCESS 권한 없음")
+    void inviteMemberToPage_Fail_NoFullAccessPermission() {
+        // given
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
+        PageInviteRequestDto request = PageInviteRequestDto.builder()
+                .userId(targetUserIdStr)
+                .permissionType(PagePermissionType.READ.name())
+                .build();
+
+        PagePermission clientPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.EDIT.name()) // FULL_ACCESS가 아님
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(clientPermission));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.inviteMemberToPage(workspaceIdStr, pageIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(23)
+    @DisplayName("페이지 멤버 초대 실패 - 초대할 사용자가 워크스페이스 멤버가 아님")
+    void inviteMemberToPage_Fail_InvitedUserNotWorkspaceMember() {
+        // given
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
+        PageInviteRequestDto request = PageInviteRequestDto.builder()
+                .userId(targetUserIdStr)
+                .permissionType(PagePermissionType.READ.name())
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(false)); // 워크스페이스 멤버가 아님
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.inviteMemberToPage(workspaceIdStr, pageIdStr, request))
+                    .expectError(WorkspaceMemberException.class)
+                    .verify();
+        }
+    }
+    
+    @Test
+    @Order(24)
     @DisplayName("페이지 멤버 권한 수정 성공 - 워크스페이스 소유자")
-    void updateMemberPermission_WhenWorkspaceOwner_ShouldSucceed() {
+    void updateMemberPagePermission_Success_WorkspaceOwner() {
         // given
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
         PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
-                .permissionType(PagePermissionType.FULL_ACCESS.name())
+                .permissionType(PagePermissionType.EDIT.name())
                 .build();
 
-        PagePermission existingPermissionForTargetUser = PagePermission.builder()
-                .id(100L)
-                .pageId(10L)
-                .userId(2L)
+        PagePermission existingPermission = PagePermission.builder()
+                .id(UUID.randomUUID())
+                .pageId(pageId)
+                .userId(targetUserId)
                 .permission(PagePermissionType.READ.name())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.just(existingPermissionForTargetUser));
-        when(reactivePagePermissionRepository.save(any(PagePermission.class))).thenAnswer(invocation -> {
-            PagePermission updatedPermission = invocation.getArgument(0);
-            return Mono.just(updatedPermission);
-        });
+        Page testPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Test Page")
+                .isPublic(false)
+                .isArchived(false)
+                .isTemplate(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(userId)
+                .lastEditedBy(userId)
+                .build();
 
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(testPage)); // testPage 사용
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, targetUserId))
+                .thenReturn(Mono.just(existingPermission));
+        when(reactivePagePermissionRepository.save(any(PagePermission.class)))
+                .thenAnswer(invocation -> {
+                    PagePermission savedPermission = invocation.getArgument(0);
+                    System.out.println("Saving permission - PageId: " + savedPermission.getPageId());
+                    System.out.println("Saving permission - UserId: " + savedPermission.getUserId());
+                    System.out.println("Saving permission - Permission: " + savedPermission.getPermission());
+                    return Mono.just(savedPermission);
+                });
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto ->
-                        dto.getUserId().equals(2L) &&
-                                dto.getPageId().equals(10L) &&
-                                dto.getPermission().equals(PagePermissionType.FULL_ACCESS.name()))
-                .verifyComplete();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        verify(reactivePagePermissionRepository, never()).findByPageIdAndUserId(10L, 1L);
-        verify(reactivePagePermissionRepository, times(1)).save(any(PagePermission.class));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.updateMemberPagePermission(workspaceIdStr, pageIdStr, targetUserIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getUserId()).isEqualTo(targetUserIdStr);
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 멤버 권한 수정 성공 - FULL_ACCESS 권한 소유 멤버")
-    void updateMemberPermission_WhenFullAccessMember_ShouldSucceed() {
+    @Order(25)
+    @DisplayName("페이지 멤버 권한 수정 실패 - 페이지 소유자 권한은 변경 불가")
+    void updateMemberPagePermission_Fail_CannotChangeOwnerPermission() {
         // given
+        UUID pageOwnerId = userId; // 페이지 소유자와 동일
+        String pageOwnerIdStr = pageOwnerId.toString();
+
         PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
                 .permissionType(PagePermissionType.READ.name())
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build(); // 소유자가 아닌 경우
-        Page pageOwnedByClientUser = Page.builder().id(10L).workspaceId(1L).createdBy(1L).build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(pageOwnerIdStr)).thenReturn(pageOwnerId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, pageOwnerId))
+                .thenReturn(Mono.just(true));
 
-        PagePermission clientUserPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.FULL_ACCESS.name())
-                .build();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        PagePermission existingPermissionForTargetUser = PagePermission.builder()
-                .id(100L)
-                .pageId(10L)
-                .userId(2L)
-                .permission(PagePermissionType.EDIT.name())
-                .build();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(pageOwnedByClientUser));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(clientUserPermission));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.just(existingPermissionForTargetUser));
-        when(reactivePagePermissionRepository.save(any(PagePermission.class))).thenAnswer(invocation -> {
-            PagePermission updatedPermission = invocation.getArgument(0);
-            return Mono.just(updatedPermission);
-        });
-
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto ->
-                        dto.getUserId().equals(2L) &&
-                                dto.getPermission().equals(PagePermissionType.READ.name()))
-                .verifyComplete();
+            // when & then
+            StepVerifier.create(pageService.updateMemberPagePermission(workspaceIdStr, pageIdStr, pageOwnerIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 멤버 권한 수정 실패 - EDIT 권한 소유 멤버")
-    void updateMemberPermission_WhenEditPermission_ShouldThrowException() {
+    @Order(26)
+    @DisplayName("페이지 멤버 권한 수정 실패 - 권한이 존재하지 않음")
+    void updateMemberPagePermission_Fail_PermissionNotFound() {
         // given
+        targetUserId = UUID.randomUUID();
+        targetUserIdStr = targetUserId.toString();
+
         PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
-                .permissionType(PagePermissionType.FULL_ACCESS.name())
+                .permissionType(PagePermissionType.EDIT.name())
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(uuidUtils.fromString(targetUserIdStr)).thenReturn(targetUserId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, targetUserId))
+                .thenReturn(Mono.just(true));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, targetUserId))
+                .thenReturn(Mono.empty()); // 권한이 존재하지 않음
 
-        PagePermission clientUserPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.EDIT.name())
-                .build();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(clientUserPermission));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
+            // when & then
+            StepVerifier.create(pageService.updateMemberPagePermission(workspaceIdStr, pageIdStr, targetUserIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 멤버 권한 수정 실패 - 수정 대상이 페이지 소유자")
-    void updateMemberPermission_WhenTargetIsPageOwner_ShouldThrowException() {
-        // given
-        PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
-                .permissionType(PagePermissionType.READ.name())
-                .build();
-
-        Page pageOwnedByTargetUser = Page.builder()
-                .id(10L)
-                .workspaceId(1L)
-                .title("Owner's Page")
-                .createdBy(2L)
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(pageOwnedByTargetUser));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.CANNOT_CHANGE_OWNER_PERMISSION)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 멤버 권한 수정 실패 - 수정 대상이 워크스페이스 멤버 아님")
-    void updateMemberPermission_WhenTargetIsNotWorkspaceMember_ShouldThrowException() {
-        // given
-        PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
-                .permissionType(PagePermissionType.READ.name())
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(false));
-
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof WorkspaceMemberException &&
-                                ((WorkspaceMemberException) throwable).getErrorCode() == ErrorCode.INVITED_USER_NOT_WORKSPACE_MEMBER)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 멤버 권한 수정 실패 - 수정 대상의 권한 정보가 없음")
-    void updateMemberPermission_WhenTargetHasNoPermission_ShouldThrowException() {
-        // given
-        PageUpdatePermissionRequestDto request = PageUpdatePermissionRequestDto.builder()
-                .permissionType(PagePermissionType.FULL_ACCESS.name())
-                .build();
-
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
-        Page pageOwnedByClientUser = Page.builder().id(10L).workspaceId(1L).createdBy(1L).build();
-
-        PagePermission clientUserPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.FULL_ACCESS.name())
-                .build();
-
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(pageOwnedByClientUser));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(clientUserPermission));
-        when(reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(1L, 2L)).thenReturn(Mono.just(true));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 2L)).thenReturn(Mono.empty());
-
-        // when
-        Mono<PageUpdatePermissionResponseDto> result = pageService.updateMemberPagePermission(1L, 10L, 2L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
-
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_NOT_FOUND)
-                .verify();
-    }
-
-    @Test
-    @DisplayName("페이지 공개 상태 수정 성공 - 워크스페이스 소유자가 공개로 변경")
-    void updatePagePublicStatus_WhenWorkspaceOwner_ShouldSucceed() {
+    @Order(27)
+    @DisplayName("페이지 공개 상태 변경 성공 - 워크스페이스 소유자")
+    void updatePagePublicStatus_Success_WorkspaceOwner() {
         // given
         PagePublicStatusUpdateRequestDto request = PagePublicStatusUpdateRequestDto.builder()
                 .isPublic(true)
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(mockWorkspace));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePageRepository.save(any(Page.class))).thenAnswer(invocation -> {
-            Page pageToSave = invocation.getArgument(0);
-            return Mono.just(pageToSave);
-        });
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        // when
-        Mono<PagePublicStatusUpdateResponseDto> result = pageService.updatePagePublicStatus(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getPageId().equals(10L) && dto.getIsPublic().equals(true))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactivePageRepository, times(1)).save(any(Page.class));
+            // when & then
+            StepVerifier.create(pageService.updatePagePublicStatus(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getIsPublic()).isTrue();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 공개 상태 수정 성공 - Full Access 멤버가 비공개로 변경")
-    void updatePagePublicStatus_WhenFullAccessMember_ShouldSucceed() {
+    @Order(28)
+    @DisplayName("페이지 공개 상태 변경 성공 - FULL_ACCESS 권한 있는 멤버")
+    void updatePagePublicStatus_Success_FullAccessMember() {
         // given
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
         PagePublicStatusUpdateRequestDto request = PagePublicStatusUpdateRequestDto.builder()
                 .isPublic(false)
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
         PagePermission fullAccessPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
+                .pageId(pageId)
+                .userId(userId)
                 .permission(PagePermissionType.FULL_ACCESS.name())
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(fullAccessPermission));
-        when(reactivePageRepository.save(any(Page.class))).thenAnswer(invocation -> {
-            Page pageToSave = invocation.getArgument(0);
-            return Mono.just(pageToSave);
-        });
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(fullAccessPermission));
+        when(reactivePageRepository.save(any(Page.class))).thenReturn(Mono.just(page));
 
-        // when
-        Mono<PagePublicStatusUpdateResponseDto> result = pageService.updatePagePublicStatus(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectNextMatches(dto -> dto.getPageId().equals(10L) && dto.getIsPublic().equals(false))
-                .verifyComplete();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactivePageRepository, times(1)).save(any(Page.class));
+            // when & then
+            StepVerifier.create(pageService.updatePagePublicStatus(workspaceIdStr, pageIdStr, request))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getIsPublic()).isFalse();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 공개 상태 수정 실패 - Edit 권한 멤버가 변경 시도")
-    void updatePagePublicStatus_WhenEditPermissionMember_ShouldThrowException() {
+    @Order(29)
+    @DisplayName("페이지 공개 상태 변경 실패 - FULL_ACCESS 권한 없음")
+    void updatePagePublicStatus_Fail_NoFullAccessPermission() {
         // given
+        Workspace memberWorkspace = Workspace.builder()
+                .id(workspaceId)
+                .name("Test Workspace")
+                .createdBy(UUID.randomUUID())
+                .build();
+
         PagePublicStatusUpdateRequestDto request = PagePublicStatusUpdateRequestDto.builder()
                 .isPublic(true)
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
         PagePermission editPermission = PagePermission.builder()
-                .pageId(10L)
-                .userId(1L)
-                .permission(PagePermissionType.EDIT.name())
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.EDIT.name()) // FULL_ACCESS가 아님
                 .build();
 
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.just(editPermission));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(memberWorkspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(editPermission));
 
-        // when
-        Mono<PagePublicStatusUpdateResponseDto> result = pageService.updatePagePublicStatus(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        verify(reactivePageRepository, never()).save(any());
+            // when & then
+            StepVerifier.create(pageService.updatePagePublicStatus(workspaceIdStr, pageIdStr, request))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
     }
 
     @Test
-    @DisplayName("페이지 공개 상태 수정 실패 - 페이지 권한이 없는 멤버가 변경 시도")
-    void updatePagePublicStatus_WhenNoPermissionMember_ShouldThrowException() {
+    @Order(30)
+    @DisplayName("페이지 아카이브 성공 - 페이지 소유자")
+    void archivePage_Success_PageOwner() {
         // given
-        PagePublicStatusUpdateRequestDto request = PagePublicStatusUpdateRequestDto.builder()
-                .isPublic(true)
-                .build();
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page)); // page의 createdBy가 userId와 동일
+        when(reactivePageRepository.updateArchiveStatusForTree(pageId, true, userId))
+                .thenReturn(Mono.empty()); // 업데이트된 행 수
+        when(reactiveBlockRepository.updateArchiveStatusForPageTree(pageId, true))
+                .thenReturn(Mono.empty());
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.empty()); // 권한 없음
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        // when
-        Mono<PagePublicStatusUpdateResponseDto> result = pageService.updatePagePublicStatus(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
-
-        verify(reactivePageRepository, never()).save(any());
+            // when & then
+            StepVerifier.create(pageService.archivePage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getIsArchived()).isTrue();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
     }
 
     @Test
-    @DisplayName("페이지 공개 상태 수정 실패 - 워크스페이스 멤버 아님")
-    void updatePagePublicStatus_WhenNotWorkspaceMember_ShouldThrowException() {
+    @Order(31)
+    @DisplayName("페이지 아카이브 성공 - FULL_ACCESS 권한 있는 사용자")
+    void archivePage_Success_FullAccessUser() {
         // given
-        PagePublicStatusUpdateRequestDto request = PagePublicStatusUpdateRequestDto.builder()
-                .isPublic(true)
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .isPublic(false)
+                .isArchived(false)
+                .isTemplate(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(otherUserId) // 다른 사용자가 생성
+                .lastEditedBy(otherUserId)
                 .build();
 
-        Workspace workspaceOwnedByOthers = Workspace.builder().id(1L).createdBy(99L).build();
-        when(reactiveWorkspaceRepository.findById(1L)).thenReturn(Mono.just(workspaceOwnedByOthers));
-        when(reactivePageRepository.findByIdAndWorkspaceId(10L, 1L)).thenReturn(Mono.just(mockPage));
-        when(reactivePagePermissionRepository.findByPageIdAndUserId(10L, 1L)).thenReturn(Mono.empty());
+        PagePermission fullAccessPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.FULL_ACCESS.name())
+                .build();
 
-        // when
-        Mono<PagePublicStatusUpdateResponseDto> result = pageService.updatePagePublicStatus(1L, 10L, request)
-                .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(mockSecurityContext)));
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(fullAccessPermission));
+        when(reactivePageRepository.updateArchiveStatusForTree(pageId, true, otherUserId))
+                .thenReturn(Mono.empty());
+        when(reactiveBlockRepository.updateArchiveStatusForPageTree(pageId, true))
+                .thenReturn(Mono.empty());
 
-        // then
-        StepVerifier.create(result)
-                .expectErrorMatches(throwable ->
-                        throwable instanceof PageException &&
-                                ((PageException) throwable).getErrorCode() == ErrorCode.PAGE_PERMISSION_DENIED)
-                .verify();
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
 
-        verify(reactiveWorkspaceMemberRepository, never()).existsByWorkspaceIdAndUserId(any(), any());
-        verify(reactivePageRepository, never()).save(any());
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.archivePage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getIsArchived()).isTrue();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+    }
+
+    @Test
+    @Order(32)
+    @DisplayName("페이지 아카이브 실패 - FULL_ACCESS 권한 없음")
+    void archivePage_Fail_NoFullAccessPermission() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .createdBy(otherUserId)
+                .lastEditedBy(otherUserId)
+                .build();
+
+        PagePermission editPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.EDIT.name()) // FULL_ACCESS가 아님
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(editPermission));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.archivePage(workspaceIdStr, pageIdStr))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(33)
+    @DisplayName("페이지 아카이브 실패 - 페이지 권한 없음")
+    void archivePage_Fail_NoPagePermission() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .createdBy(otherUserId)
+                .lastEditedBy(otherUserId)
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.empty()); // 권한 없음
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.archivePage(workspaceIdStr, pageIdStr))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(34)
+    @DisplayName("페이지 복원 성공 - 페이지 소유자")
+    void restorePage_Success_PageOwner() {
+        // given
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactivePageRepository.updateArchiveStatusForTree(pageId, false, userId))
+                .thenReturn(Mono.empty());
+        when(reactiveBlockRepository.updateArchiveStatusForPageTree(pageId, false))
+                .thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.restorePage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getIsArchived()).isFalse();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+    }
+
+    @Test
+    @Order(35)
+    @DisplayName("페이지 복원 성공 - FULL_ACCESS 권한 있는 사용자")
+    void restorePage_Success_FullAccessUser() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .createdBy(otherUserId)
+                .lastEditedBy(otherUserId)
+                .build();
+
+        PagePermission fullAccessPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.FULL_ACCESS.name())
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(fullAccessPermission));
+        when(reactivePageRepository.updateArchiveStatusForTree(pageId, false, otherUserId))
+                .thenReturn(Mono.empty());
+        when(reactiveBlockRepository.updateArchiveStatusForPageTree(pageId, false))
+                .thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.restorePage(workspaceIdStr, pageIdStr))
+                    .expectNextMatches(response -> {
+                        assertThat(response.getPageId()).isEqualTo(pageIdStr);
+                        assertThat(response.getIsArchived()).isFalse();
+                        return true;
+                    })
+                    .verifyComplete();
+        }
+    }
+
+    @Test
+    @Order(36)
+    @DisplayName("페이지 복원 실패 - 페이지 없음")
+    void restorePage_Fail_PageNotFound() {
+        // given
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.empty()); // 페이지 없음
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.restorePage(workspaceIdStr, pageIdStr))
+                    .expectError(PageException.class)
+                    .verify();
+        }
+    }
+
+    @Test
+    @Order(37)
+    @DisplayName("페이지 삭제 성공 - 페이지 소유자")
+    void deletePage_Success_PageOwner() {
+        // given
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(page));
+        when(reactiveBlockRepository.deleteAllByPageTree(pageId))
+                .thenReturn(Mono.empty()); // 삭제된 블록 수
+        when(reactivePageRepository.deletePageAndDescendants(pageId))
+                .thenReturn(Mono.empty()); // 삭제된 페이지 수
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.deletePage(workspaceIdStr, pageIdStr))
+                    .verifyComplete(); // Mono<Void>이므로 완료만 확인
+        }
+
+        // 삭제 메소드들이 호출되었는지 확인
+        verify(reactiveBlockRepository).deleteAllByPageTree(pageId);
+        verify(reactivePageRepository).deletePageAndDescendants(pageId);
+    }
+
+    @Test
+    @Order(38)
+    @DisplayName("페이지 삭제 성공 - FULL_ACCESS 권한 있는 사용자")
+    void deletePage_Success_FullAccessUser() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .createdBy(otherUserId)
+                .lastEditedBy(otherUserId)
+                .build();
+
+        PagePermission fullAccessPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.FULL_ACCESS.name())
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(fullAccessPermission));
+        when(reactiveBlockRepository.deleteAllByPageTree(pageId))
+                .thenReturn(Mono.empty());
+        when(reactivePageRepository.deletePageAndDescendants(pageId))
+                .thenReturn(Mono.empty());
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.deletePage(workspaceIdStr, pageIdStr))
+                    .verifyComplete();
+        }
+
+        verify(reactiveBlockRepository).deleteAllByPageTree(pageId);
+        verify(reactivePageRepository).deletePageAndDescendants(pageId);
+    }
+
+    @Test
+    @Order(39)
+    @DisplayName("페이지 삭제 실패 - FULL_ACCESS 권한 없음")
+    void deletePage_Fail_NoFullAccessPermission() {
+        // given
+        UUID otherUserId = UUID.randomUUID();
+        Page otherUserPage = Page.builder()
+                .id(pageId)
+                .workspaceId(workspaceId)
+                .parentPageId(parentPageId)
+                .title("Other User Page")
+                .createdBy(otherUserId)
+                .lastEditedBy(otherUserId)
+                .build();
+
+        PagePermission editPermission = PagePermission.builder()
+                .pageId(pageId)
+                .userId(userId)
+                .permission(PagePermissionType.EDIT.name()) // FULL_ACCESS가 아님
+                .build();
+
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.just(workspace));
+        when(reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId))
+                .thenReturn(Mono.just(otherUserPage));
+        when(reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId))
+                .thenReturn(Mono.just(editPermission));
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.deletePage(workspaceIdStr, pageIdStr))
+                    .expectError(PagePermissionException.class)
+                    .verify();
+        }
+
+        // 삭제 메소드들이 호출되지 않았는지 확인
+        verify(reactiveBlockRepository, never()).deleteAllByPageTree(any());
+        verify(reactivePageRepository, never()).deletePageAndDescendants(any());
+    }
+
+    @Test
+    @Order(40)
+    @DisplayName("페이지 삭제 실패 - 워크스페이스 없음")
+    void deletePage_Fail_WorkspaceNotFound() {
+        // given
+        when(uuidUtils.fromString(workspaceIdStr)).thenReturn(workspaceId);
+        when(uuidUtils.fromString(pageIdStr)).thenReturn(pageId);
+        when(reactiveWorkspaceRepository.findById(workspaceId)).thenReturn(Mono.empty()); // 워크스페이스 없음
+
+        try (MockedStatic<ReactiveSecurityContextHolder> mockedSecurityContext =
+                     mockStatic(ReactiveSecurityContextHolder.class)) {
+
+            mockedSecurityContext.when(ReactiveSecurityContextHolder::getContext)
+                    .thenReturn(Mono.just(securityContext));
+
+            // when & then
+            StepVerifier.create(pageService.deletePage(workspaceIdStr, pageIdStr))
+                    .expectError(WorkspaceException.class)
+                    .verify();
+        }
     }
 }

@@ -6,6 +6,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -15,7 +16,7 @@ import java.time.LocalDateTime;
 @Table("users")
 public class User {
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("username")
     private String username;

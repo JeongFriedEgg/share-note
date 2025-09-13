@@ -6,8 +6,8 @@ import lombok.Getter;
 @Getter
 @Builder
 public class BlockListItemResponseDto {
-    private Long blockId;
-    private Long parentBlockId;
+    private String blockId;
+    private String parentBlockId;
     private String type;
     private Integer position;
 }

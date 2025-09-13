@@ -8,6 +8,6 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class BlockStatusResponseDto {
-    private Long blockId;
+    private String blockId;
     private Boolean isArchived;
 }

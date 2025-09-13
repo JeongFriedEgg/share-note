@@ -9,14 +9,14 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class PageInviteResponseDto {
-    private Long pageId;
-    private Long userId;
+    private String pageId;
+    private String userId;
     private String permission;
 
     public static PageInviteResponseDto from(PagePermission pagePermission) {
         return PageInviteResponseDto.builder()
-                .pageId(pagePermission.getPageId())
-                .userId(pagePermission.getUserId())
+                .pageId(pagePermission.getPageId().toString())
+                .userId(pagePermission.getUserId().toString())
                 .permission(pagePermission.getPermission())
                 .build();
     }

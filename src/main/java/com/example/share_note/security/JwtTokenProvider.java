@@ -3,6 +3,7 @@ package com.example.share_note.security;
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.exception.ErrorCode;
 import com.example.share_note.exception.JwtAuthenticationException;
+import com.example.share_note.util.UuidUtils;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
@@ -20,6 +21,7 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 
@@ -31,15 +33,18 @@ public class JwtTokenProvider {
     private final SecretKey secretKey;
     private final long accessTokenExpiration;
     private final long refreshTokenExpiration;
+    private final UuidUtils uuidUtils;
 
 
     public JwtTokenProvider(@Value("${jwt.secret}") String key,
                             @Value("${jwt.access-token.expiration}") long accessTokenExpiration,
-                            @Value("${jwt.refresh-token.expiration}") long refreshTokenExpiration) {
+                            @Value("${jwt.refresh-token.expiration}") long refreshTokenExpiration,
+                            UuidUtils uuidUtils) {
         byte[] bytes = Decoders.BASE64.decode(key);
         this.secretKey = Keys.hmacShaKeyFor(bytes);
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
+        this.uuidUtils = uuidUtils;
     }
 
     public String createAccessToken(Authentication authentication) {
@@ -62,7 +67,7 @@ public class JwtTokenProvider {
                 .collect(Collectors.joining(","));
 
         CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
-        Long userId = userDetails.getId();
+        UUID userId = userDetails.getId();
         String username = userDetails.getUsername();
         String email = userDetails.getEmail();
 
@@ -111,7 +116,8 @@ public class JwtTokenProvider {
 
     public Authentication getAuthentication(String token) {
         Claims claims = getClaims(token);
-        Long userId = claims.get("userId", Long.class);
+        String userIdString = claims.get("userId", String.class);
+        UUID userId = uuidUtils.fromString(userIdString);
         String username = claims.get("username", String.class);
         String email = claims.get("email", String.class);
 

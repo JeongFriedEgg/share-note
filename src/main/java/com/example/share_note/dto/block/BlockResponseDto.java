@@ -13,31 +13,31 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class BlockResponseDto {
-    private Long id;
-    private Long pageId;
-    private Long parentBlockId;
+    private String id;
+    private String pageId;
+    private String parentBlockId;
     private String type;
     private String content;
     private Integer position;
     private boolean isArchived;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private Long createdBy;
-    private Long lastEditedBy;
+    private String createdBy;
+    private String lastEditedBy;
 
     public static BlockResponseDto from(Block block) {
         return BlockResponseDto.builder()
-                .id(block.getId())
-                .pageId(block.getPageId())
-                .parentBlockId(block.getParentBlockId())
+                .id(block.getId().toString())
+                .pageId(block.getPageId().toString())
+                .parentBlockId(block.getParentBlockId() != null ? block.getParentBlockId().toString() : null)
                 .type(block.getType())
                 .content(block.getContent())
                 .position(block.getPosition())
                 .isArchived(block.isArchived())
                 .createdAt(block.getCreatedAt())
                 .updatedAt(block.getUpdatedAt())
-                .createdBy(block.getCreatedBy())
-                .lastEditedBy(block.getLastEditedBy())
+                .createdBy(block.getCreatedBy().toString())
+                .lastEditedBy(block.getLastEditedBy().toString())
                 .build();
     }
 }

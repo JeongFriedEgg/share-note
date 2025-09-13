@@ -8,7 +8,7 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class PageListItemResponseDto {
-    private Long pageId;
+    private String pageId;
     private String title;
     private String icon;
 }

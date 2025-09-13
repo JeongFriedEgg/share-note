@@ -7,6 +7,7 @@ import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Getter
 @Setter
@@ -17,13 +18,13 @@ import java.time.LocalDateTime;
 public class WorkspaceMember {
 
     @Id
-    private Long id;
+    private UUID id;
 
     @Column("workspace_id")
-    private Long workspaceId;
+    private UUID workspaceId;
 
     @Column("user_id")
-    private Long userId;
+    private UUID userId;
 
     @Column("role")
     private WorkspaceRole role;

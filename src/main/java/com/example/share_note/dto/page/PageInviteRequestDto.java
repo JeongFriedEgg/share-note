@@ -6,6 +6,6 @@ import lombok.Getter;
 @Getter
 @Builder
 public class PageInviteRequestDto {
-    private Long userId;
+    private String userId;
     private String permissionType;
 }

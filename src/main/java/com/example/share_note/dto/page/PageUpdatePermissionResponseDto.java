@@ -9,16 +9,16 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class PageUpdatePermissionResponseDto {
-    private Long permissionId;
-    private Long pageId;
-    private Long userId;
+    private String permissionId;
+    private String pageId;
+    private String userId;
     private String permission;
 
     public static PageUpdatePermissionResponseDto from(PagePermission pagePermission) {
         return PageUpdatePermissionResponseDto.builder()
-                .permissionId(pagePermission.getId())
-                .pageId(pagePermission.getPageId())
-                .userId(pagePermission.getUserId())
+                .permissionId(pagePermission.getId().toString())
+                .pageId(pagePermission.getPageId().toString())
+                .userId(pagePermission.getUserId().toString())
                 .permission(pagePermission.getPermission())
                 .build();
     }

@@ -21,7 +21,9 @@ public class GlobalExceptionHandler {
             WorkspaceException.class,
             WorkspaceMemberException.class,
             PageException.class,
-            BlockException.class
+            PagePermissionException.class,
+            BlockException.class,
+            UuidException.class
     })
     public ResponseEntity<ErrorResponseDto> handleCustomException(ApiException ex) {
         ErrorCode errorCode = ex.getErrorCode();

@@ -7,6 +7,6 @@ import lombok.Getter;
 @Getter
 @Builder
 public class WorkspaceMemberInviteRequestDto {
-    private Long userId;
+    private String userId;
     private WorkspaceRole role;
 }

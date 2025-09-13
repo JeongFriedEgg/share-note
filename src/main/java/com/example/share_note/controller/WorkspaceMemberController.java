@@ -16,7 +16,7 @@ public class WorkspaceMemberController {
 
     @PostMapping("/invite")
     public Mono<ResponseEntity<WorkspaceMemberResponseDto>> inviteMember(
-            @PathVariable Long workspaceId,
+            @PathVariable String workspaceId,
             @RequestBody WorkspaceMemberInviteRequestDto request) {
         return workspaceMemberService.inviteMember(workspaceId, request)
                 .map(response ->
@@ -25,14 +25,14 @@ public class WorkspaceMemberController {
 
     @GetMapping
     public Mono<ResponseEntity<WorkspaceMemberListResponseDto>> getWorkspaceMembers(
-            @PathVariable Long workspaceId) {
+            @PathVariable String workspaceId) {
         return workspaceMemberService.getWorkspaceMembers(workspaceId)
                 .map(ResponseEntity::ok);
     }
 
     @PutMapping("/role")
     public Mono<ResponseEntity<WorkspaceMemberResponseDto>> updateMemberRole(
-            @PathVariable Long workspaceId,
+            @PathVariable String workspaceId,
             @RequestBody  WorkspaceMemberRoleUpdateRequestDto request) {
         return workspaceMemberService.updateMemberRole(workspaceId, request)
                 .map(ResponseEntity::ok);
@@ -40,8 +40,8 @@ public class WorkspaceMemberController {
 
     @DeleteMapping("/{userId}")
     public Mono<ResponseEntity<Void>> removeMember(
-            @PathVariable Long workspaceId,
-            @PathVariable Long userId) {
+            @PathVariable String workspaceId,
+            @PathVariable String userId) {
         return workspaceMemberService.removeMember(workspaceId, userId)
                 .then(Mono.just(ResponseEntity.noContent().build()));
     }

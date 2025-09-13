@@ -8,8 +8,10 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.UUID;
+
 @Repository
-public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, Long> {
+public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, UUID> {
 
     // 재귀 CTE를 사용하여 특정 페이지와 모든 하위 페이지에 속한 블록의 is_archived 상태를 변경
     @Modifying
@@ -24,7 +26,7 @@ public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, L
         SET is_archived = :isArchived
         WHERE page_id IN (SELECT id FROM page_tree);
     """)
-    Mono<Void> updateArchiveStatusForPageTree(Long pageId, boolean isArchived);
+    Mono<Void> updateArchiveStatusForPageTree(UUID pageId, boolean isArchived);
 
     // 재귀 CTE를 사용하여 특정 페이지와 모든 하위 페이지에 속한 블록을 영구 삭제
     @Modifying
@@ -38,11 +40,11 @@ public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, L
         DELETE FROM block
         WHERE page_id IN (SELECT id FROM page_tree);
     """)
-    Mono<Void> deleteAllByPageTree(Long pageId);
+    Mono<Void> deleteAllByPageTree(UUID pageId);
 
-    Mono<Block> findByIdAndPageId(Long id, Long pageId);
+    Mono<Block> findByIdAndPageId(UUID id, UUID pageId);
 
-    Flux<Block> findAllByPageIdAndIsArchivedFalseOrderByPositionAsc(Long pageId);
+    Flux<Block> findAllByPageIdAndIsArchivedFalseOrderByPositionAsc(UUID pageId);
 
 
     /**
@@ -69,5 +71,5 @@ public interface ReactiveBlockRepository extends ReactiveCrudRepository<Block, L
             last_edited_by = :lastEditedBy
         WHERE id IN (SELECT id FROM block_tree);
     """)
-    Mono<Integer> updateArchiveStatusForBlockTree(Long blockId, boolean isArchived, Long lastEditedBy);
+    Mono<Integer> updateArchiveStatusForBlockTree(UUID blockId, boolean isArchived, UUID lastEditedBy);
 }

@@ -11,17 +11,17 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class PageCreateResponseDto {
-    private Long pageId;
-    private Long workspaceId;
+    private String pageId;
+    private String workspaceId;
     private LocalDateTime createdAt;
-    private Long createdBy;
+    private String createdBy;
 
     public static PageCreateResponseDto from(Page page) {
         return PageCreateResponseDto.builder()
-                .pageId(page.getId())
-                .workspaceId(page.getWorkspaceId())
+                .pageId(page.getId().toString())
+                .workspaceId(page.getWorkspaceId().toString())
                 .createdAt(page.getCreatedAt())
-                .createdBy(page.getCreatedBy())
+                .createdBy(page.getCreatedBy().toString())
                 .build();
     }
 }

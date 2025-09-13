@@ -20,7 +20,7 @@ public class PageController {
 
     @PostMapping
     public Mono<ResponseEntity<PageCreateResponseDto>> createPage(
-            @PathVariable Long workspaceId,
+            @PathVariable String workspaceId,
             @RequestBody PageCreateRequestDto request) {
         return pageService.createPage(workspaceId, request)
                 .map(response ->
@@ -29,23 +29,23 @@ public class PageController {
 
     @GetMapping
     public Mono<ResponseEntity<PageListResponseDto>> getPages(
-            @PathVariable Long workspaceId) {
+            @PathVariable String workspaceId) {
         return pageService.getPages(workspaceId)
                 .map(ResponseEntity::ok);
     }
 
     @GetMapping("/{pageId}")
     public Mono<ResponseEntity<PageResponseDto>> getPage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId) {
         return pageService.getPage(workspaceId, pageId)
                 .map(ResponseEntity::ok);
     }
 
     @PutMapping("/{pageId}")
     public Mono<ResponseEntity<PageResponseDto>> updatePage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
             @RequestBody PageUpdateRequestDto request) {
         return pageService.updatePage(workspaceId, pageId, request)
                 .map(ResponseEntity::ok);
@@ -53,8 +53,8 @@ public class PageController {
 
     @PostMapping("/{pageId}/members")
     public Mono<ResponseEntity<PageInviteResponseDto>> inviteMemberToPage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
             @RequestBody PageInviteRequestDto request) {
         return pageService.inviteMemberToPage(workspaceId, pageId, request)
                 .map(response ->
@@ -63,9 +63,9 @@ public class PageController {
 
     @PutMapping("/{pageId}/members/{userId}")
     public Mono<ResponseEntity<PageUpdatePermissionResponseDto>> updateMemberPagePermission(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
-            @PathVariable Long userId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
+            @PathVariable String userId,
             @RequestBody PageUpdatePermissionRequestDto request) {
         return pageService.updateMemberPagePermission(workspaceId, pageId, userId, request)
                 .map(ResponseEntity::ok);
@@ -73,8 +73,8 @@ public class PageController {
 
     @PutMapping("/{pageId}/public")
     public Mono<ResponseEntity<PagePublicStatusUpdateResponseDto>> updatePagePublicStatus(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId,
+            @PathVariable String workspaceId,
+            @PathVariable String pageId,
             @RequestBody PagePublicStatusUpdateRequestDto request) {
         return pageService.updatePagePublicStatus(workspaceId, pageId, request)
                 .map(ResponseEntity::ok);
@@ -82,24 +82,24 @@ public class PageController {
 
     @PutMapping("/{pageId}/archive")
     public Mono<ResponseEntity<PageStatusResponseDto>> archivePage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId) {
         return pageService.archivePage(workspaceId, pageId)
                 .map(ResponseEntity::ok);
     }
 
     @PutMapping("/{pageId}/restore")
     public Mono<ResponseEntity<PageStatusResponseDto>> restorePage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId) {
         return pageService.restorePage(workspaceId, pageId)
                 .map(ResponseEntity::ok);
     }
 
     @DeleteMapping("/{pageId}")
     public Mono<ResponseEntity<Void>> deletePage(
-            @PathVariable Long workspaceId,
-            @PathVariable Long pageId) {
+            @PathVariable String workspaceId,
+            @PathVariable String pageId) {
         return pageService.deletePage(workspaceId, pageId)
                 .then(Mono.just(ResponseEntity.noContent().build()));
     }

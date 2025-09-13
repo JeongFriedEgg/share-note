@@ -11,6 +11,7 @@ import com.example.share_note.exception.UserException;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
 import com.example.share_note.security.JwtTokenProvider;
+import com.example.share_note.util.UuidUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,6 +49,9 @@ public class UserServiceTest {
     @Mock
     private JwtTokenProvider jwtTokenProvider;
 
+    @Mock
+    private UuidUtils uuidUtils;
+
     @InjectMocks
     private UserService userService;
 
@@ -59,7 +63,7 @@ public class UserServiceTest {
     @BeforeEach
     void setUp() {
         user = User.builder()
-                .id(1L)
+                .id(uuidUtils.generate())
                 .username("testuser")
                 .password("testpassword")
                 .email("test@example.com")
