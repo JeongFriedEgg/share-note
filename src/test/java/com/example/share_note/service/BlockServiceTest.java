@@ -14,6 +14,7 @@ import com.example.share_note.exception.PageException;
 import com.example.share_note.exception.PagePermissionException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.*;
+import com.example.share_note.service.impl.BlockServiceImpl;
 import com.example.share_note.util.UuidUtils;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -58,7 +59,7 @@ class BlockServiceTest {
     private UuidUtils uuidUtils;
 
     @InjectMocks
-    private BlockService blockService;
+    private BlockServiceImpl blockService;
 
     private UUID workspaceId;
     private UUID userId;

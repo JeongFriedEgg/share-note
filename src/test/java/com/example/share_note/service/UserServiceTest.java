@@ -11,6 +11,7 @@ import com.example.share_note.exception.UserException;
 import com.example.share_note.repository.ReactiveRefreshTokenRepository;
 import com.example.share_note.repository.ReactiveUserRepository;
 import com.example.share_note.security.JwtTokenProvider;
+import com.example.share_note.service.impl.UserServiceImpl;
 import com.example.share_note.util.UuidUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -53,7 +54,7 @@ public class UserServiceTest {
     private UuidUtils uuidUtils;
 
     @InjectMocks
-    private UserService userService;
+    private UserServiceImpl userService;
 
     private User user;
 

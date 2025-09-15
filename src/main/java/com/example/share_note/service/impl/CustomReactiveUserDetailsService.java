@@ -1,4 +1,4 @@
-package com.example.share_note.service;
+package com.example.share_note.service.impl;
 
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.repository.ReactiveUserRepository;

@@ -2,7 +2,7 @@ package com.example.share_note.security;
 
 import com.example.share_note.exception.AuthenticationFailedException;
 import com.example.share_note.exception.ErrorCode;
-import com.example.share_note.service.CustomReactiveUserDetailsService;
+import com.example.share_note.service.impl.CustomReactiveUserDetailsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;

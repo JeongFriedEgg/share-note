@@ -9,6 +9,7 @@ import com.example.share_note.dto.page.*;
 import com.example.share_note.enums.PagePermissionType;
 import com.example.share_note.exception.*;
 import com.example.share_note.repository.*;
+import com.example.share_note.service.impl.PageServiceImpl;
 import com.example.share_note.util.UuidUtils;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,7 +54,7 @@ public class PageServiceTest {
     private UuidUtils uuidUtils;
 
     @InjectMocks
-    private PageService pageService;
+    private PageServiceImpl pageService;
 
     private UUID workspaceId;
     private UUID userId;

@@ -11,6 +11,7 @@ import com.example.share_note.exception.WorkspaceException;
 import com.example.share_note.exception.WorkspaceMemberException;
 import com.example.share_note.repository.ReactiveWorkspaceMemberRepository;
 import com.example.share_note.repository.ReactiveWorkspaceRepository;
+import com.example.share_note.service.impl.WorkspaceMemberServiceImpl;
 import com.example.share_note.util.UuidUtils;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -45,7 +46,7 @@ public class WorkspaceMemberServiceTest {
     private UuidUtils uuidUtils;
 
     @InjectMocks
-    private WorkspaceMemberService workspaceMemberService;
+    private WorkspaceMemberServiceImpl workspaceMemberService;
 
     private UUID workspaceId;
     private UUID ownerId;
