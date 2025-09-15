@@ -1,1 +1,3 @@
 rootProject.name = 'share-note'
+include 'share-note-service'
+
