@@ -1,6 +1,7 @@
 package com.example.share_note.service.impl;
 
 import com.example.share_note.domain.Block;
+import com.example.share_note.domain.Page;
 import com.example.share_note.dto.CustomUserDetails;
 import com.example.share_note.dto.block.*;
 import com.example.share_note.enums.PagePermissionType;
@@ -47,76 +48,14 @@ public class BlockServiceImpl implements BlockService {
         UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
         UUID pageId = uuidUtils.fromString(pageIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                .flatMap(page ->
-                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                .flatMap(workspace -> {
-                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                        return Mono.just(page); // 소유자는 무조건 편집 가능
-                                                    }
-
-                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                            .flatMap(isMember -> {
-                                                                if (!isMember) {
-                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
-                                                                }
-
-                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                        .flatMap(permission -> {
-                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
-                                                                                return Mono.just(page);
-                                                                            }
-                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                        })
-                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                            });
-                                                })
-                                )
-                                .flatMap(page -> {
-                                    // 부모 블록이 있는 경우 존재 확인
-                                    if (request.getParentBlockId() != null) {
-                                        return reactiveBlockRepository.findByIdAndPageId(uuidUtils.fromString(request.getParentBlockId()), pageId)
-                                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.PARENT_BLOCK_NOT_FOUND)))
-                                                .then(Mono.just(page));
-                                    }
-                                    return Mono.just(page);
-                                })
-                                .flatMap(page ->
-                                        reactiveBlockRepository.save(Block.builder()
-                                                .pageId(pageId)
-                                                .parentBlockId(uuidUtils.fromString(request.getParentBlockId()))
-                                                .type(request.getType())
-                                                .content(request.getContent())
-                                                .position(request.getPosition() != null ? request.getPosition() : 0)
-                                                .isArchived(false)
-                                                .createdAt(LocalDateTime.now())
-                                                .updatedAt(LocalDateTime.now())
-                                                .createdBy(customUserDetails.getId())
-                                                .lastEditedBy(customUserDetails.getId())
-                                                .build()
-                                        )
-                                )
-                )
-                .map(BlockCreateResponseDto::from)
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof WorkspaceMemberException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(user -> validateEditPermission(workspaceId, pageId, user.getId()))
+                        .flatMap(page -> validateParentBlock(request.getParentBlockId(), pageId))
+                        .then(getCurrentUser())
+                        .flatMap(user -> createAndSaveBlock(pageId, request, user.getId()))
+                        .map(BlockCreateResponseDto::from)
+        );
     }
 
     /**
@@ -134,68 +73,21 @@ public class BlockServiceImpl implements BlockService {
         UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
         UUID pageId = uuidUtils.fromString(pageIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                .flatMap(page ->
-                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                .flatMap(workspace -> {
-                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                        return Mono.just(page); // 소유자는 무조건 읽기 가능
-                                                    }
-
-                                                    // 워크스페이스 멤버이면서 페이지 읽기 권한이 있는지 확인
-                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                            .flatMap(isMember -> {
-                                                                if (isMember) {
-                                                                    return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                            .flatMap(permission -> {
-                                                                                PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                if (permissionType.getLevel() >= PagePermissionType.READ.getLevel()) {
-                                                                                    return Mono.just(page);
-                                                                                }
-                                                                                return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                            })
-                                                                            .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                } else {
-                                                                    // 워크스페이스 멤버가 아닌 경우 페이지 공개 여부 확인
-                                                                    if (page.isPublic()) {
-                                                                        return Mono.just(page);
-                                                                    }
-                                                                    return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                }
-                                                            });
-                                                })
-                                )
-                                .flatMap(page ->
-                                        reactiveBlockRepository.findAllByPageIdAndIsArchivedFalseOrderByPositionAsc(pageId)
-                                                .map(block ->
-                                                        BlockListItemResponseDto.builder()
-                                                                .blockId(uuidUtils.fromUUID(block.getId()))
-                                                                .parentBlockId(uuidUtils.fromUUID(block.getParentBlockId()))
-                                                                .type(block.getType())
-                                                                .position(block.getPosition())
-                                                                .build()
-                                                )
-                                                .collectList()
-                                                .map(BlockListResponseDto::new)
-                                )
-                )
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(user -> validateReadPermission(workspaceId, pageId, user.getId()))
+                        .flatMap(page ->
+                                reactiveBlockRepository.findAllByPageIdAndIsArchivedFalseOrderByPositionAsc(pageId)
+                                        .map(block -> BlockListItemResponseDto.builder()
+                                                .blockId(uuidUtils.fromUUID(block.getId()))
+                                                .parentBlockId(uuidUtils.fromUUID(block.getParentBlockId()))
+                                                .type(block.getType())
+                                                .position(block.getPosition())
+                                                .build())
+                                        .collectList()
+                                        .map(BlockListResponseDto::new)
+                        )
+        );
     }
 
     /**
@@ -215,63 +107,16 @@ public class BlockServiceImpl implements BlockService {
         UUID pageId = uuidUtils.fromString(pageIdStr);
         UUID blockId = uuidUtils.fromString(blockIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        // 블록 존재 확인
-                        reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
-                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
-                                .flatMap(block ->
-                                        // 페이지 존재 확인
-                                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                                .flatMap(page ->
-                                                        // 워크스페이스 소유자인지 확
-                                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                                .flatMap(workspace -> {
-                                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                                        return Mono.just(block); // 소유자는 무조건 읽기 가능
-                                                                    }
-
-                                                                    // 워크스페이스 멤버이면서 페이지 읽기 권한이 있는지 확인
-                                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                                            .flatMap(isMember -> {
-                                                                                if (isMember) {
-                                                                                    return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                                            .flatMap(permission -> {
-                                                                                                PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                                if (permissionType.getLevel() >= PagePermissionType.READ.getLevel()) {
-                                                                                                    return Mono.just(block);
-                                                                                                }
-                                                                                                return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                            })
-                                                                                            .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                                } else {
-                                                                                    // 워크스페이스 멤버가 아닌 경우 페이지 공개 여부 확인
-                                                                                    if (page.isPublic()) {
-                                                                                        return Mono.just(block);
-                                                                                    }
-                                                                                    return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                }
-                                                                            });
-                                                                })
-                                                )
-                                )
-                )
-                .map(BlockResponseDto::from)
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(user ->
+                                findBlockByIdAndPageId(blockId, pageId)
+                                        .flatMap(block -> validateReadPermission(workspaceId, pageId, user.getId())
+                                                .thenReturn(block)
+                                        )
+                        )
+                        .map(BlockResponseDto::from)
+        );
     }
 
     /**
@@ -288,81 +133,25 @@ public class BlockServiceImpl implements BlockService {
      * @param request
      * @return
      */
-    public Mono<BlockResponseDto> updateBlock(String workspaceIdStr, String pageIdStr, String blockIdStr, BlockUpdateRequestDto request) {
+    public Mono<BlockResponseDto> updateBlock(String workspaceIdStr, String pageIdStr,
+                                              String blockIdStr, BlockUpdateRequestDto request) {
         UUID workspaceId = uuidUtils.fromString(workspaceIdStr);
         UUID pageId = uuidUtils.fromString(pageIdStr);
         UUID blockId = uuidUtils.fromString(blockIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        // 블록 존재 확인
-                        reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
-                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
-                                .flatMap(block ->
-                                        // 페이지 존재 확인
-                                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                                .flatMap(page ->
-                                                        // 워크스페이스 소유자인지 확인
-                                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                                .flatMap(workspace -> {
-                                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                                        return Mono.just(block); // 소유자는 무조건 편집 가능
-                                                                    }
-
-                                                                    // 워크스페이스 멤버이면서 페이지 편집 권한이 있는지 확인
-                                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                                            .flatMap(isMember -> {
-                                                                                if (!isMember) {
-                                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
-                                                                                }
-
-                                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                                        .flatMap(permission -> {
-                                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
-                                                                                                return Mono.just(block);
-                                                                                            }
-                                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                        })
-                                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                            });
-                                                                })
-                                                )
-                                                .flatMap(blockToUpdate -> {
-                                                    // 블록 수정
-                                                    if (request.getType() != null) {
-                                                        blockToUpdate.setType(request.getType());
-                                                    }
-                                                    if (request.getContent() != null) {
-                                                        blockToUpdate.setContent(request.getContent());
-                                                    }
-                                                    if (request.getPosition() != null) {
-                                                        blockToUpdate.setPosition(request.getPosition());
-                                                    }
-                                                    blockToUpdate.setUpdatedAt(LocalDateTime.now());
-                                                    blockToUpdate.setLastEditedBy(customUserDetails.getId());
-
-                                                    return reactiveBlockRepository.save(blockToUpdate);
-                                                })
-                                )
-                )
-                .map(BlockResponseDto::from)
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof WorkspaceMemberException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(user ->
+                                findBlockByIdAndPageId(blockId, pageId)
+                                        .flatMap(block ->
+                                                validateEditPermission(workspaceId, pageId, user.getId())
+                                                        .thenReturn(block)
+                                        )
+                                        .map(block -> updateBlockFields(block, request, user.getId()))
+                                        .flatMap(reactiveBlockRepository::save)
+                        )
+                        .map(BlockResponseDto::from)
+        );
     }
 
     /**
@@ -385,79 +174,20 @@ public class BlockServiceImpl implements BlockService {
         UUID pageId = uuidUtils.fromString(pageIdStr);
         UUID blockId = uuidUtils.fromString(blockIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        // 블록 존재 확인
-                        reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
-                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
-                                .flatMap(block ->
-                                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                                .flatMap(page ->
-                                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                                .flatMap(workspace -> {
-                                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                                        return Mono.just(block);
-                                                                    }
-
-                                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                                            .flatMap(isMember -> {
-                                                                                if (!isMember) {
-                                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
-                                                                                }
-
-                                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                                        .flatMap(permission -> {
-                                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
-                                                                                                return Mono.just(block);
-                                                                                            }
-                                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                        })
-                                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                            });
-                                                                })
-                                                )
-                                                .flatMap(blockToMove -> {
-                                                    // 자기 자신을 부모로 설정하는 것 방지
-                                                    if (request.getNewParentBlockId() != null && request.getNewParentBlockId().equals(blockId.toString())) {
-                                                        return Mono.error(new BlockException(ErrorCode.CANNOT_MOVE_TO_SELF));
-                                                    }
-
-                                                    // 새 부모 블록이 있는 경우 존재 확인
-                                                    if (request.getNewParentBlockId() != null) {
-                                                        return reactiveBlockRepository.findByIdAndPageId(uuidUtils.fromString(request.getNewParentBlockId()), pageId)
-                                                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.PARENT_BLOCK_NOT_FOUND)))
-                                                                .then(Mono.just(blockToMove));
-                                                    }
-                                                    return Mono.just(blockToMove);
-                                                })
-                                                .flatMap(blockToMove -> {
-                                                    blockToMove.setParentBlockId(uuidUtils.fromString(request.getNewParentBlockId()));
-                                                    blockToMove.setPosition(request.getNewPosition());
-                                                    blockToMove.setUpdatedAt(LocalDateTime.now());
-                                                    blockToMove.setLastEditedBy(customUserDetails.getId());
-
-                                                    return reactiveBlockRepository.save(blockToMove);
-                                                })
-                                )
-                )
-                .map(BlockResponseDto::from)
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof WorkspaceMemberException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(user ->
+                                findBlockByIdAndPageId(blockId, pageId)
+                                        .flatMap(block -> validateEditPermission(workspaceId, pageId, user.getId())
+                                                .then(validateNotSelfParent(blockId, request.getNewParentBlockId()))
+                                                .then(validateParentBlock(request.getNewParentBlockId(), pageId))
+                                                .thenReturn(block)
+                                        )
+                                        .map(block -> updateBlockPosition(block, request, user.getId()))
+                                        .flatMap(reactiveBlockRepository::save)
+                        )
+                        .map(BlockResponseDto::from)
+        );
     }
 
     /**
@@ -478,60 +208,15 @@ public class BlockServiceImpl implements BlockService {
         UUID pageId = uuidUtils.fromString(pageIdStr);
         UUID blockId = uuidUtils.fromString(blockIdStr);
 
-        return ReactiveSecurityContextHolder.getContext()
-                .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
-                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
-                                .flatMap(block ->
-                                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                                .flatMap(page ->
-                                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                                .flatMap(workspace -> {
-                                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                                        return Mono.just(block);
-                                                                    }
-
-                                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                                            .flatMap(isMember -> {
-                                                                                if (!isMember) {
-                                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
-                                                                                }
-
-                                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                                        .flatMap(permission -> {
-                                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
-                                                                                                return Mono.just(block);
-                                                                                            }
-                                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                        })
-                                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                            });
-                                                                })
-                                                )
-                                )
-                                .flatMap(block ->
-                                        // CTE를 사용하여 블록과 하위 블록을 일괄적으로 보관 처리
-                                        reactiveBlockRepository.updateArchiveStatusForBlockTree(blockId, true, customUserDetails.getId())
-                                                .thenReturn(BlockStatusResponseDto.builder().blockId(blockId.toString()).isArchived(true).build())
-                                )
-                )
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof WorkspaceMemberException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
-                    }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
-                });
+        return handleStandardExceptions(
+                getCurrentUser()
+                        .flatMap(customUserDetails ->
+                                validateBlockAndEditPermissionForArchive(workspaceId, pageId, blockId, customUserDetails.getId())
+                                        .flatMap(block ->
+                                                updateArchiveStatus(blockId, true, customUserDetails.getId())
+                                        )
+                        )
+        );
     }
 
     /**
@@ -552,59 +237,260 @@ public class BlockServiceImpl implements BlockService {
         UUID pageId = uuidUtils.fromString(pageIdStr);
         UUID blockId = uuidUtils.fromString(blockIdStr);
 
+        return handleStandardExceptions(getCurrentUser()
+                .flatMap(customUserDetails ->
+                        validateBlockAndEditPermissionForArchive(workspaceId, pageId, blockId, customUserDetails.getId())
+                                .flatMap(block -> updateArchiveStatus(blockId, false, customUserDetails.getId()))
+                )
+        );
+    }
+
+    /**
+     * 현재 인증된 사용자 정보 조회
+     */
+    private Mono<CustomUserDetails> getCurrentUser() {
         return ReactiveSecurityContextHolder.getContext()
                 .map(securityContext -> (CustomUserDetails) securityContext.getAuthentication().getPrincipal())
-                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)))
-                .flatMap(customUserDetails ->
-                        reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
-                                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
-                                .flatMap(block ->
-                                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
-                                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
-                                                .flatMap(page ->
-                                                        reactiveWorkspaceRepository.findById(workspaceId)
-                                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
-                                                                .flatMap(workspace -> {
-                                                                    if (workspace.getCreatedBy().equals(customUserDetails.getId())) {
-                                                                        return Mono.just(block);
-                                                                    }
+                .switchIfEmpty(Mono.error(new UserException(ErrorCode.AUTHENTICATION_FAILED)));
+    }
 
-                                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, customUserDetails.getId())
-                                                                            .flatMap(isMember -> {
-                                                                                if (!isMember) {
-                                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
-                                                                                }
+    /**
+     * 페이지 읽기 권한 확인
+     * 워크스페이스 소유자, 멤버 권한, 공개 페이지 여부 종합 검증
+     */
+    private Mono<Page> validateReadPermission(UUID workspaceId, UUID pageId, UUID userId) {
+        return reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
+                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
+                .flatMap(page ->
+                        reactiveWorkspaceRepository.findById(workspaceId)
+                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
+                                .flatMap(workspace -> {
+                                    // 워크스페이스 소유자는 모든 페이지 읽기 가능
+                                    if (workspace.getCreatedBy().equals(userId)) {
+                                        return Mono.just(page);
+                                    }
 
-                                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, customUserDetails.getId())
-                                                                                        .flatMap(permission -> {
-                                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
-                                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
-                                                                                                return Mono.just(block);
-                                                                                            }
-                                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
-                                                                                        })
-                                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
-                                                                            });
-                                                                })
-                                                )
-                                )
-                                .flatMap(block ->
-                                        // CTE를 사용하여 블록과 하위 블록을 일괄적으로 복원 처리
-                                        reactiveBlockRepository.updateArchiveStatusForBlockTree(blockId, false, customUserDetails.getId())
-                                                .thenReturn(BlockStatusResponseDto.builder().blockId(blockId.toString()).isArchived(false).build())
-                                )
-                )
-                .onErrorMap(throwable -> {
-                    if (throwable instanceof UserException ||
-                            throwable instanceof PageException ||
-                            throwable instanceof PagePermissionException ||
-                            throwable instanceof WorkspaceException ||
-                            throwable instanceof WorkspaceMemberException ||
-                            throwable instanceof BlockException ||
-                            throwable instanceof UuidException) {
-                        return throwable;
+                                    return checkMemberPermissionOrPublic(workspaceId, pageId, userId, page, PagePermissionType.READ)
+                                            .thenReturn(page);
+                                })
+                );
+    }
+
+    /**
+     * 페이지 편집 권한 확인
+     * 워크스페이스 소유자 또는 편집 권한이 있는 멤버만 허용
+     */
+    private Mono<Page> validateEditPermission(UUID workspaceId, UUID pageId, UUID userId) {
+        return reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
+                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
+                .flatMap(page ->
+                        reactiveWorkspaceRepository.findById(workspaceId)
+                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
+                                .flatMap(workspace -> {
+                                    // 워크스페이스 소유자는 모든 페이지 편집 가능
+                                    if (workspace.getCreatedBy().equals(userId)) {
+                                        return Mono.just(page);
+                                    }
+                                    return checkMemberEditPermission(workspaceId, pageId, userId)
+                                            .thenReturn(page); // Boolean을 무시하고 Page 반환
+                                })
+                );
+    }
+
+    /**
+     * 멤버 권한 또는 공개 페이지 확인 (읽기용)
+     */
+    private Mono<Boolean> checkMemberPermissionOrPublic(UUID workspaceId, UUID pageId, UUID userId,
+                                                        Page page, PagePermissionType requiredPermission) {
+        return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId)
+                .flatMap(isMember -> {
+                    if (isMember) {
+                        return checkPagePermission(pageId, userId, requiredPermission);
+                    } else {
+                        // 멤버가 아닌 경우 공개 페이지 여부 확인
+                        if (page.isPublic()) {
+                            return Mono.just(true);
+                        }
+                        return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
                     }
-                    return new BlockException(ErrorCode.UNEXPECTED_ERROR);
                 });
+    }
+
+    /**
+     * 멤버 편집 권한 확인 (편집용)
+     */
+    private Mono<Boolean> checkMemberEditPermission(UUID workspaceId, UUID pageId, UUID userId) {
+        return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId)
+                .flatMap(isMember -> {
+                    if (!isMember) {
+                        return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
+                    }
+                    return checkPagePermission(pageId, userId, PagePermissionType.EDIT);
+                });
+    }
+
+    /**
+     * 페이지 권한 레벨 확인
+     */
+    private Mono<Boolean> checkPagePermission(UUID pageId, UUID userId, PagePermissionType requiredPermission) {
+        return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId)
+                .flatMap(permission -> {
+                    PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
+                    if (permissionType.getLevel() >= requiredPermission.getLevel()) {
+                        return Mono.just(true);
+                    }
+                    return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
+                })
+                .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
+    }
+
+    /**
+     * 블록 존재 여부 확인
+     */
+    private Mono<Block> findBlockByIdAndPageId(UUID blockId, UUID pageId) {
+        return reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
+                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)));
+    }
+
+    /**
+     * 부모 블록 존재 여부 확인
+     */
+    private Mono<Void> validateParentBlock(String parentBlockIdStr, UUID pageId) {
+        if (parentBlockIdStr == null) {
+            return Mono.empty();
+        }
+
+        UUID parentBlockId = uuidUtils.fromString(parentBlockIdStr);
+        return reactiveBlockRepository.findByIdAndPageId(parentBlockId, pageId)
+                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.PARENT_BLOCK_NOT_FOUND)))
+                .then();
+    }
+
+    /**
+     * 순환 참조 방지 검증
+     */
+    private Mono<Void> validateNotSelfParent(UUID blockId, String newParentBlockIdStr) {
+        if (newParentBlockIdStr != null && newParentBlockIdStr.equals(blockId.toString())) {
+            return Mono.error(new BlockException(ErrorCode.CANNOT_MOVE_TO_SELF));
+        }
+        return Mono.empty();
+    }
+
+    /**
+     * 표준 예외 매핑 처리
+     */
+    private <T> Mono<T> handleStandardExceptions(Mono<T> mono) {
+        return mono.onErrorMap(throwable -> {
+            if (throwable instanceof UserException ||
+                    throwable instanceof PageException ||
+                    throwable instanceof PagePermissionException ||
+                    throwable instanceof WorkspaceException ||
+                    throwable instanceof WorkspaceMemberException ||
+                    throwable instanceof BlockException ||
+                    throwable instanceof UuidException) {
+                return throwable;
+            }
+            return new BlockException(ErrorCode.UNEXPECTED_ERROR);
+        });
+    }
+
+    /**
+     * 블록 생성
+     */
+    private Mono<Block> createAndSaveBlock(UUID pageId, BlockCreateRequestDto request, UUID userId) {
+        return reactiveBlockRepository.save(Block.builder()
+                .pageId(pageId)
+                .parentBlockId(uuidUtils.fromString(request.getParentBlockId()))
+                .type(request.getType())
+                .content(request.getContent())
+                .position(request.getPosition() != null ? request.getPosition() : 0)
+                .isArchived(false)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
+                .createdBy(userId)
+                .lastEditedBy(userId)
+                .build()
+        );
+    }
+
+    /**
+     * 블록 업데이트
+     */
+    private Block updateBlockFields(Block block, BlockUpdateRequestDto request, UUID userId) {
+        if (request.getType() != null) {
+            block.setType(request.getType());
+        }
+        if (request.getContent() != null) {
+            block.setContent(request.getContent());
+        }
+        if (request.getPosition() != null) {
+            block.setPosition(request.getPosition());
+        }
+        block.setUpdatedAt(LocalDateTime.now());
+        block.setLastEditedBy(userId);
+
+        return block;
+    }
+
+    /**
+     * 블록 위치 변경
+     */
+    private Block updateBlockPosition(Block block, BlockMoveRequestDto request, UUID userId) {
+        block.setParentBlockId(uuidUtils.fromString(request.getNewParentBlockId()));
+        block.setPosition(request.getNewPosition());
+        block.setUpdatedAt(LocalDateTime.now());
+        block.setLastEditedBy(userId);
+
+        return block;
+    }
+
+    /**
+     * 블록 및 편집 권한 검증 (archiveBlock, restoreBlock 전용)
+     * 기존 로직과 동일한 순서로 검증하여 테스트 호환성 보장
+     */
+    private Mono<Block> validateBlockAndEditPermissionForArchive(UUID workspaceId, UUID pageId, UUID blockId, UUID userId) {
+        return reactiveBlockRepository.findByIdAndPageId(blockId, pageId)
+                .switchIfEmpty(Mono.error(new BlockException(ErrorCode.BLOCK_NOT_FOUND)))
+                .flatMap(block ->
+                        reactivePageRepository.findByIdAndWorkspaceId(pageId, workspaceId)
+                                .switchIfEmpty(Mono.error(new PageException(ErrorCode.PAGE_NOT_FOUND)))
+                                .flatMap(page ->
+                                        reactiveWorkspaceRepository.findById(workspaceId)
+                                                .switchIfEmpty(Mono.error(new WorkspaceException(ErrorCode.WORKSPACE_NOT_FOUND)))
+                                                .flatMap(workspace -> {
+                                                    if (workspace.getCreatedBy().equals(userId)) {
+                                                        return Mono.just(block);
+                                                    }
+
+                                                    return reactiveWorkspaceMemberRepository.existsByWorkspaceIdAndUserId(workspaceId, userId)
+                                                            .flatMap(isMember -> {
+                                                                if (!isMember) {
+                                                                    return Mono.error(new WorkspaceMemberException(ErrorCode.MEMBER_NOT_FOUND));
+                                                                }
+
+                                                                return reactivePagePermissionRepository.findByPageIdAndUserId(pageId, userId)
+                                                                        .flatMap(permission -> {
+                                                                            PagePermissionType permissionType = PagePermissionType.valueOf(permission.getPermission());
+                                                                            if (permissionType.getLevel() >= PagePermissionType.EDIT.getLevel()) {
+                                                                                return Mono.just(block);
+                                                                            }
+                                                                            return Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED));
+                                                                        })
+                                                                        .switchIfEmpty(Mono.error(new PagePermissionException(ErrorCode.PAGE_PERMISSION_DENIED)));
+                                                            });
+                                                })
+                                )
+                );
+    }
+
+    /**
+     * 아카이브 상태 업데이트 공통 로직
+     */
+    private Mono<BlockStatusResponseDto> updateArchiveStatus(UUID blockId, boolean isArchived, UUID userId) {
+        return reactiveBlockRepository.updateArchiveStatusForBlockTree(blockId, isArchived, userId)
+                .thenReturn(BlockStatusResponseDto.builder()
+                        .blockId(blockId.toString())
+                        .isArchived(isArchived)
+                        .build());
     }
 }
