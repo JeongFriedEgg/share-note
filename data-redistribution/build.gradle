@@ -1,0 +1,87 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.sharenote'
+version = '1.0.0'
+description = 'ShareNote Data Redistribution Module'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+
+    // 데이터베이스
+    implementation 'org.postgresql:postgresql'
+    implementation 'com.zaxxer:HikariCP'
+
+    // Redis & 분산락
+    implementation 'org.redisson:redisson-spring-boot-starter:3.24.3'
+
+    // JSON 처리
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    // API 문서화
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // 모니터링
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // 테스트
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:redis'
+    testImplementation 'org.springframework.batch:spring-batch-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    maxHeapSize = '2g'
+    systemProperty 'spring.profiles.active', 'test'
+}
+
+tasks.named('bootRun') {
+    jvmArgs = [
+            '-Xms2g',
+            '-Xmx4g',
+            '-XX:+UseG1GC'
+    ]
+
+    if (project.hasProperty('profiles')) {
+        systemProperty 'spring.profiles.active', project.profiles
+    }
+}
+
+jar {
+    enabled = false
+    archiveClassifier = ''
+}
