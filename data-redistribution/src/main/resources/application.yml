@@ -1,0 +1,176 @@
+spring:
+  application:
+    name: sharenote-data-redistribution
+
+  # 다중 데이터소스 설정 (레거시 + 샤드)
+  datasource:
+    # 레거시 데이터베이스 (소스)
+    legacy:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://localhost:5432/sharenote_legacy
+      username: sharenote_user
+      password: sharenote_password
+      hikari:
+        maximum-pool-size: 20
+        minimum-idle: 5
+        idle-timeout: 300000
+        connection-timeout: 30000
+        pool-name: LegacyHikariPool
+
+    # 샤드1 데이터베이스
+    shard1:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://localhost:5433/sharenote_shard1
+      username: sharenote_user
+      password: sharenote_password
+      hikari:
+        maximum-pool-size: 20
+        minimum-idle: 5
+        idle-timeout: 300000
+        connection-timeout: 30000
+        pool-name: Shard1HikariPool
+
+    # 샤드2 데이터베이스
+    shard2:
+      driver-class-name: org.postgresql.Driver
+      url: jdbc:postgresql://localhost:5434/sharenote_shard2
+      username: sharenote_user
+      password: sharenote_password
+      hikari:
+        maximum-pool-size: 20
+        minimum-idle: 5
+        idle-timeout: 300000
+        connection-timeout: 30000
+        pool-name: Shard2HikariPool
+
+  # JPA 설정
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: false
+        jdbc:
+          batch_size: 1000
+          batch_versioned_data: true
+        order_inserts: true
+        order_updates: true
+    open-in-view: false
+
+  # Redis 설정 (Sentinel 모드)
+  redis:
+    # sentinel:
+    #   master: mymaster
+    #   nodes:
+    #     - localhost:26379
+    #     - localhost:26380
+    #     - localhost:26381
+    #   password: redis_password
+    host: localhost
+    port: 6379
+    # password: redis_password  # Redis server has no password configured
+    timeout: 10s
+    lettuce:
+      pool:
+        max-active: 20
+        max-idle: 10
+        min-idle: 5
+        max-wait: 10s
+
+  # 배치 작업 설정
+  batch:
+    job:
+      enabled: false  # 수동 시작
+    jdbc:
+      initialize-schema: never
+
+  # Actuator 설정
+  management:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,metrics
+        base-path: /actuator
+    endpoint:
+      health:
+        show-details: when-authorized
+
+# 애플리케이션 설정
+app:
+  # 데이터 재분산 설정
+  redistribution:
+    enabled: true
+    batch-size: 1000
+    thread-pool-size: 10
+    retry-count: 3
+    delay-between-batches: 1000
+    progress-report-interval: 10000
+    verification:
+      enabled: true
+      sample-rate: 0.1
+    cleanup:
+      enabled: false
+      backup-before-cleanup: true
+
+  # 데이터베이스 샤딩 설정
+  database:
+    sharding:
+      enabled: true
+      strategy: hash
+      shard-count: 2
+      default-shard: legacy
+
+  # 분산락 Redisson 설정 (단일 서버 모드)
+  redisson:
+    host: "localhost"
+    port: 6379
+    # password: "redis_password"  # Redis server has no password configured
+    timeout: 10000
+    connect-timeout: 10000
+    idle-connection-timeout: 30000
+    retry-attempts: 3
+    retry-interval: 2000
+
+  # 분산락 Redisson 설정 (Sentinel 모드) - 주석 처리
+  # redisson:
+  #   sentinel:
+  #     master-name: "mymaster"
+  #     password: "redis_password"
+  #     sentinel-addresses:
+  #       - "redis://localhost:26379"
+  #       - "redis://localhost:26380"
+  #       - "redis://localhost:26381"
+  #     timeout: 10000
+  #     connect-timeout: 10000
+  #     idle-connection-timeout: 30000
+  #     retry-attempts: 3
+  #     retry-interval: 2000
+  #     master-connection-minimum-idle-size: 10
+  #     master-connection-pool-size: 20
+  #     slave-connection-minimum-idle-size: 10
+  #     slave-connection-pool-size: 20
+  #     scan-interval: 2000
+
+# 로깅 설정
+logging:
+  level:
+    com.sharenote.redistribution: INFO
+    org.springframework.batch: INFO
+    org.redisson: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/data-redistribution.log
+    max-size: 100MB
+    max-history: 30
+
+# 서버 설정
+server:
+  port: 8082
+  servlet:
+    context-path: /data-redistribution
+  shutdown: graceful
