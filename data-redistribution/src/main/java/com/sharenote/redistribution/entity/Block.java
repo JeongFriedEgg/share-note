@@ -3,6 +3,8 @@ package com.sharenote.redistribution.entity;
 import com.sharenote.redistribution.enums.MigrationStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -29,6 +31,7 @@ public class Block {
     private String type;
 
     @Column(columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String content;
 
     @Column(nullable = false)
@@ -51,9 +54,4 @@ public class Block {
 
     @Column(name = "last_edited_by", columnDefinition = "UUID")
     private UUID lastEditedBy;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "migration_status")
-    @Builder.Default
-    private MigrationStatus migrationStatus = MigrationStatus.READY;
 }

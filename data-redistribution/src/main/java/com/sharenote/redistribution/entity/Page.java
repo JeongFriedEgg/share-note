@@ -1,8 +1,11 @@
 package com.sharenote.redistribution.entity;
 
+import com.sharenote.redistribution.entity.converter.MigrationStatusConverter;
 import com.sharenote.redistribution.enums.MigrationStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -29,12 +32,15 @@ public class Page {
     private String title;
 
     @Column(columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String icon;
 
     @Column(columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String cover;
 
     @Column(columnDefinition = "JSONB")
+    @JdbcTypeCode(SqlTypes.JSON)
     private String properties;
 
     @Column(name = "is_public")
@@ -64,12 +70,6 @@ public class Page {
     private UUID lastEditedBy;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "migration_status")
-    @Builder.Default
-    private MigrationStatus migrationStatus = MigrationStatus.READY;
-
-    @PreUpdate
-    public void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
-    }
+    @Column(name = "migration_status", length = 20)
+    private MigrationStatus migrationStatus;
 }

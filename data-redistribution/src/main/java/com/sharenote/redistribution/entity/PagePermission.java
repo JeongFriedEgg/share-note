@@ -36,9 +36,4 @@ public class PagePermission {
 
     @Column(name = "granted_by", columnDefinition = "UUID")
     private UUID grantedBy;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "migration_status")
-    @Builder.Default
-    private MigrationStatus migrationStatus = MigrationStatus.READY;
 }
