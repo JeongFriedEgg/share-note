@@ -1,6 +1,5 @@
 package com.sharenote.redistribution.entity;
 
-import com.sharenote.redistribution.entity.converter.MigrationStatusConverter;
 import com.sharenote.redistribution.enums.MigrationStatus;
 import jakarta.persistence.*;
 import lombok.*;

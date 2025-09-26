@@ -62,26 +62,3 @@ dependencies {
     testImplementation 'org.testcontainers:redis'
     testImplementation 'org.springframework.batch:spring-batch-test'
 }
-
-tasks.named('test') {
-    useJUnitPlatform()
-    maxHeapSize = '2g'
-    systemProperty 'spring.profiles.active', 'test'
-}
-
-tasks.named('bootRun') {
-    jvmArgs = [
-            '-Xms2g',
-            '-Xmx4g',
-            '-XX:+UseG1GC'
-    ]
-
-    if (project.hasProperty('profiles')) {
-        systemProperty 'spring.profiles.active', project.profiles
-    }
-}
-
-jar {
-    enabled = false
-    archiveClassifier = ''
-}
