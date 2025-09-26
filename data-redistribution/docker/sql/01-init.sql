@@ -1,13 +1,11 @@
--- Create database schema for ShareNote Data Redistribution
-
--- Enable UUID extension
+-- UUID 활성화
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create enum types
-CREATE TYPE migration_status AS ENUM ('READY', 'MIGRATING', 'MIGRATED');
-CREATE TYPE page_permission_type AS ENUM ('READ', 'COMMENT', 'EDIT', 'FULL_ACCESS');
+-- enum 타입 생성
+--CREATE TYPE migration_status AS ENUM ('READY', 'MIGRATING', 'MIGRATED', 'FAILED');
+--CREATE TYPE page_permission_type AS ENUM ('READ', 'COMMENT', 'EDIT', 'FULL_ACCESS');
 
--- Create pages table
+-- 페이지 테이블 생성
 CREATE TABLE pages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     workspace_id UUID,
@@ -23,10 +21,10 @@ CREATE TABLE pages (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID,
     last_edited_by UUID,
-    migration_status migration_status DEFAULT 'READY'
+    migration_status VARCHAR(20) DEFAULT 'READY'
 );
 
--- Create blocks table
+-- 블록 테이블 생성
 CREATE TABLE blocks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     page_id UUID NOT NULL,
@@ -38,32 +36,15 @@ CREATE TABLE blocks (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_by UUID,
-    last_edited_by UUID,
-    migration_status migration_status DEFAULT 'READY'
+    last_edited_by UUID
 );
 
--- Create page_permissions table
+-- 페이지 권한 테이블 생성
 CREATE TABLE page_permissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     page_id UUID NOT NULL,
     user_id UUID NOT NULL,
-    permission_type page_permission_type,
+    permission_type VARCHAR(20),
     granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    granted_by UUID,
-    migration_status migration_status DEFAULT 'READY'
+    granted_by UUID
 );
-
--- Create triggers for updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_pages_updated_at BEFORE UPDATE ON pages
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_blocks_updated_at BEFORE UPDATE ON blocks
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
