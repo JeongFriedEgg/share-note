@@ -1,279 +1,226 @@
 package com.sharenote.redistribution.service.migration;
 
-import com.sharenote.redistribution.dto.response.BatchMigrationResult;
-import com.sharenote.redistribution.dto.response.MigrationResult;
-import com.sharenote.redistribution.entity.Block;
 import com.sharenote.redistribution.entity.Page;
-import com.sharenote.redistribution.entity.PagePermission;
 import com.sharenote.redistribution.enums.MigrationStatus;
-import com.sharenote.redistribution.repository.BlockRepository;
-import com.sharenote.redistribution.repository.PagePermissionRepository;
-import com.sharenote.redistribution.repository.PageRepository;
-import com.sharenote.redistribution.repository.ShardAwareRepository;
+import com.sharenote.redistribution.exception.custom.LockAcquisitionException;
+import com.sharenote.redistribution.exception.custom.MigrationException;
+import com.sharenote.redistribution.exception.custom.RedisConnectionException;
+import com.sharenote.redistribution.properties.MigrationProperties;
+import com.sharenote.redistribution.repository.legacy.LegacyPageRepository;
 import com.sharenote.redistribution.service.lock.DistributedLockService;
-import com.sharenote.redistribution.service.shard.ShardStrategy;
+import com.sharenote.redistribution.service.shard.ShardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.DefaultTransactionDefinition;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 @Slf4j
 @Service
-@Transactional
 @RequiredArgsConstructor
 public class MigrationService {
+    private final LegacyPageRepository legacyPageRepository;
 
-    private final PageRepository pageRepository;
-    private final BlockRepository blockRepository;
-    private final PagePermissionRepository pagePermissionRepository;
-    private final ShardAwareRepository shardAwareRepository;
-    private final ShardStrategy shardStrategy;
     private final DistributedLockService distributedLockService;
-    private final MigrationProgressService progressService;
+    private final MigrationTransactionService migrationTransactionService;
+    private final ShardService shardService;
+    private final MigrationProperties migrationProperties;
 
-    @Value("${app.redistribution.batch-size:1000}")
-    private int batchSize;
-
-    @Value("${app.redistribution.delay-between-batches:1000}")
-    private long delayBetweenBatches;
-
-    @Value("${app.redistribution.retry-count:3}")
-    private int retryCount;
+    private static final String LEGACY_SHARD_KEY = "legacy";
 
     /**
-     * 데이터 재분산 실행 메인 메서드
+     * 이전 마이그레이션 실패 페이지 상태를 재설정 - 개선된 버전
      */
-    public MigrationResult executeMigration() {
-        log.info("데이터 재분산 작업 시작 - 배치 크기: {}", batchSize);
-
-        MigrationResult result = MigrationResult.builder()
-                .startTime(LocalDateTime.now())
-                .build();
-
-        try {
-            // 진행률 추적 초기화
-            long totalPages = countPagesForMigration();
-            progressService.initializeProgress(totalPages);
-
-            result.setTotalPages(totalPages);
-            log.info("마이그레이션 대상 페이지 총 {}개", totalPages);
-
-            // 페이징 처리로 배치 마이그레이션 실행
-            Pageable pageable = PageRequest.of(0, batchSize);
-            org.springframework.data.domain.Page<Page> pagesBatch;
-            int processedBatches = 0;
-
-            do {
-                pagesBatch = pageRepository.findPagesByMigrationStatus(
-                        MigrationStatus.READY, pageable);
-
-                if (pagesBatch.hasContent()) {
-                    BatchMigrationResult batchResult = migrateBatch(pagesBatch.getContent());
-                    result.addBatchResult(batchResult);
-
-                    processedBatches++;
-                    log.info("배치 {}개 완료 - 성공: {}, 실패: {}",
-                            processedBatches, batchResult.getSuccessCount(), batchResult.getFailureCount());
-
-                    // 배치 간 지연
-                    if (delayBetweenBatches > 0 && pagesBatch.hasNext()) {
-                        Thread.sleep(delayBetweenBatches);
-                    }
-                }
-
-                pageable = pagesBatch.nextPageable();
-            } while (pagesBatch.hasNext());
-
-            result.setEndTime(LocalDateTime.now());
-            result.setSuccess(true);
-
-            log.info("데이터 재분산 완료 - 총 처리: {}개, 성공: {}개, 실패: {}개",
-                    result.getTotalProcessed(), result.getTotalSuccess(), result.getTotalFailures());
-
-        } catch (Exception e) {
-            result.setEndTime(LocalDateTime.now());
-            result.setSuccess(false);
-            result.setErrorMessage(e.getMessage());
-            log.error("데이터 재분산 작업 중 오류 발생", e);
-        }
-
-        return result;
+    @Transactional(value = "legacyTransactionManager", propagation = Propagation.REQUIRED)
+    public void resetMigratingStatus() {
+        log.info("이전 마이그레이션 실패 페이지 상태를 재설정합니다.");
+        legacyPageRepository.updateAllMigratingPagesToReady();
+        log.info("MIGRATING 상태 페이지 {}개를 READY로 재설정 완료.");
     }
 
     /**
-     * 배치 단위 마이그레이션 처리
+     * 메인 마이그레이션 실행 메서드
      */
-    private BatchMigrationResult migrateBatch(List<Page> pages) {
-        BatchMigrationResult batchResult = new BatchMigrationResult();
+    public void executeMigration() {
+        log.info("페이지 마이그레이션을 시작합니다.");
 
-        for (Page page : pages) {
-            try {
-                boolean migrated = migratePageWithRetry(page);
-                if (migrated) {
-                    batchResult.incrementSuccess();
-                    progressService.incrementProgress();
-                } else {
-                    batchResult.incrementFailure();
-                    batchResult.addFailedPageId(page.getId());
-                }
-            } catch (Exception e) {
-                log.error("페이지 {} 마이그레이션 중 예상치 못한 오류", page.getId(), e);
-                batchResult.incrementFailure();
-                batchResult.addFailedPageId(page.getId());
+        int processedBatchCount = 0;
+        int totalProcessedPages = 0;
+        int totalFailedPages = 0;
+        int lockFailureCount = 0;
+
+        while (true) {
+            List<Page> pagesToMigrate = getNextBatchOfPagesToMigrate();
+
+            if (pagesToMigrate.isEmpty()) {
+                log.info("마이그레이션할 페이지가 더 이상 없습니다. 마이그레이션을 완료합니다.");
+                break;
             }
-        }
 
-        return batchResult;
-    }
+            log.info("배치 #{} 시작 - {}개의 페이지를 처리합니다.", ++processedBatchCount, pagesToMigrate.size());
 
-    /**
-     * 재시도를 포함한 페이지 마이그레이션
-     */
-    private boolean migratePageWithRetry(Page page) {
-        for (int attempt = 1; attempt <= retryCount; attempt++) {
-            try {
-                return distributedLockService.executeWithLock(page.getId(), () -> {
-                    return migratePage(page);
-                });
-            } catch (Exception e) {
-                log.warn("페이지 {} 마이그레이션 시도 {}/{} 실패: {}",
-                        page.getId(), attempt, retryCount, e.getMessage());
-
-                if (attempt == retryCount) {
-                    log.error("페이지 {} 마이그레이션 최대 재시도 횟수 초과", page.getId(), e);
-                    return false;
-                }
-
-                // 재시도 전 대기
+            // 배치 내의 각 페이지를 순차적으로 마이그레이션
+            for (Page page : pagesToMigrate) {
                 try {
-                    Thread.sleep(1000 * attempt); // 지수 백오프
+                    migratePageWithRetry(page);
+                    totalProcessedPages++;
+                    log.debug("페이지 {} 마이그레이션 완료", page.getId());
+                } catch (RedisConnectionException e) {
+                    log.error("Redis 연결 실패로 인한 마이그레이션 중단: 페이지 {}", page.getId(), e);
+                    throw new MigrationException("Redis 연결 실패로 인한 전체 마이그레이션 중단", e);
+
+                } catch (LockAcquisitionException e) {
+                    lockFailureCount++;
+                    totalFailedPages++;
+                    log.error("분산락 획득 실패: 페이지 {} - 다른 프로세스에서 처리 중일 수 있습니다", page.getId(), e);
+
+                    // 락 획득 실패는 READY 상태로 되돌려서 나중에 재시도 가능하도록 함
+                    migrationTransactionService.rollbackLegacyStatus(page.getId());
+
+                } catch (Exception e) {
+                    totalFailedPages++;
+                    log.error("페이지 {} 마이그레이션 최종 실패", page.getId(), e);
+                }
+            }
+
+            log.info("배치 #{} 완료 - 성공: {}, 실패: {} (락실패: {}), 누적 처리: {}",
+                    processedBatchCount,
+                    totalProcessedPages - totalFailedPages,
+                    totalFailedPages,
+                    lockFailureCount,
+                    totalProcessedPages);
+
+            if (lockFailureCount > pagesToMigrate.size() / 2) {
+                log.warn("락 실패가 많습니다. 5초간 대기 후 계속 진행합니다.");
+                try {
+                    Thread.sleep(5000);
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    return false;
+                    throw new MigrationException("마이그레이션 중 인터럽트 발생", ie);
                 }
+                lockFailureCount = 0; // 리셋
             }
         }
-        return false;
+
+        log.info("전체 마이그레이션 완료 - 총 성공: {}, 총 실패: {}",
+                totalProcessedPages - totalFailedPages, totalFailedPages);
     }
 
     /**
-     * 단일 페이지 마이그레이션 (분산락 내에서 실행)
+     * 마이그레이션이 필요한 다음 배치의 페이지들을 조회
      */
-    @Transactional
-    protected boolean migratePage(Page page) {
-        try {
-            // 1. 마이그레이션 상태를 MIGRATING으로 변경
-            updatePageMigrationStatus(page.getId(), MigrationStatus.MIGRATING);
+    @Transactional(value = "legacyTransactionManager", readOnly = true)
+    private List<Page> getNextBatchOfPagesToMigrate() {
+        Pageable pageable = PageRequest.of(0, migrationProperties.getBatchSize());
 
-            // 2. 대상 샤드 결정
-            String targetShard = shardStrategy.determineShardByPageId(page.getId());
-            log.debug("페이지 {} 대상 샤드: {}", page.getId(), targetShard);
+        // READY 상태 페이지 우선 조회
+        org.springframework.data.domain.Page<Page> readyPages =
+                legacyPageRepository.findByMigrationStatusOrderByUpdatedAtAsc(MigrationStatus.READY, pageable);
 
-            // 3. 관련 데이터 조회
-            List<Block> blocks = blockRepository.findByPageIdAndNotArchived(page.getId());
-            List<PagePermission> permissions = pagePermissionRepository.findByPageId(page.getId());
+        if (!readyPages.getContent().isEmpty()) {
+            return readyPages.getContent();
+        }
 
-            // 4. 대상 샤드에 데이터 저장
-            savePageDataToTargetShard(targetShard, page, blocks, permissions);
+        // READY가 없으면 FAILED 상태 재시도
+        org.springframework.data.domain.Page<Page> failedPages =
+                legacyPageRepository.findByMigrationStatusOrderByUpdatedAtAsc(MigrationStatus.FAILED, pageable);
 
-            // 5. 마이그레이션 상태를 MIGRATED로 변경
-            updateAllMigrationStatus(page.getId(), MigrationStatus.MIGRATED);
+        return failedPages.getContent();
+    }
 
-            log.info("페이지 {} 마이그레이션 완료 - 샤드: {}, 블록: {}개, 권한: {}개",
-                    page.getId(), targetShard, blocks.size(), permissions.size());
+    /**
+     * 재시도 로직이 포함된 페이지 마이그레이션 메서드
+     */
+    private void migratePageWithRetry(Page page) {
+        int attemptCount = 0;
+        UUID pageId = page.getId();
+        int retryCount = migrationProperties.getRetryCount();
+        Exception lastException = null;
 
-            return true;
+        while (attemptCount < retryCount) {
+            attemptCount++;
 
-        } catch (Exception e) {
-            log.error("페이지 {} 마이그레이션 실패", page.getId(), e);
-            // 실패 시 상태를 READY로 롤백
             try {
-                updateAllMigrationStatus(page.getId(), MigrationStatus.READY);
-            } catch (Exception rollbackException) {
-                log.error("페이지 {} 마이그레이션 상태 롤백 실패", page.getId(), rollbackException);
+                migrateSinglePage(page);
+                log.info("페이지 {} 마이그레이션 성공 (시도 {}/{})", pageId, attemptCount, retryCount);
+                return;
+            } catch (RedisConnectionException | LockAcquisitionException e) {
+                // Redis 관련 예외는 즉시 상위로 전파 (재시도 하지 않음)
+                log.error("분산락 문제로 페이지 {} 마이그레이션 실패 (시도 {}/{})",
+                        pageId, attemptCount, retryCount, e);
+                throw e;
+            }catch (Exception e) {
+                lastException = e;
+                log.warn("페이지 {} 마이그레이션 실패 (시도 {}/{}) - {}",
+                        pageId, attemptCount, retryCount, e.getMessage());
+
+                if (attemptCount < retryCount) {
+                    try {
+                        Thread.sleep(1000 + (attemptCount * 500));
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new MigrationException("마이그레이션 재시도 중 인터럽트 발생", ie);
+                    }
+                }
             }
-            throw e;
         }
+
+        // 최대 재시도 횟수 초과 시 실패 처리
+        log.error("페이지 {} 마이그레이션 최대 재시도 횟수 초과", pageId);
+        migrationTransactionService.markPageStatusAsFailed(pageId);
+        throw new MigrationException("페이지 마이그레이션 최종 실패: " + pageId, lastException);
     }
 
     /**
-     * 대상 샤드에 페이지 관련 데이터 저장
+     * 단일 페이지 마이그레이션 메서드 (트랜잭션 없음, 분산락 사용)
      */
-    private void savePageDataToTargetShard(String targetShard, Page page,
-                                           List<Block> blocks, List<PagePermission> permissions) {
+    public void migrateSinglePage(Page page) {
+        UUID pageId = page.getId();
+        String lockKey = "migration:page:" + pageId;
 
-        PlatformTransactionManager targetTxManager = shardAwareRepository.getTransactionManager(targetShard);
+        distributedLockService.executeWithLock(lockKey, 300, 600, () -> {
+            try {
+                // 전체 마이그레이션 로직을 트랜잭션 메서드로 위임
+                migrationTransactionService.performMigrationTransaction(pageId);
+                return null;
 
-        // 대상 샤드에서 새 트랜잭션 시작
-        TransactionStatus targetTxStatus = targetTxManager.getTransaction(
-                new DefaultTransactionDefinition());
+            } catch (Exception e) {
+                log.error("페이지 {} 마이그레이션 중 오류 발생", pageId, e);
+                // 롤백은 트랜잭션 밖에서 처리
+                rollbackPageMigration(pageId);
+                throw e;
+            }
+        });
+    }
+
+    /**
+     * 마이그레이션 롤백 처리
+     */
+    public void rollbackPageMigration(UUID pageId) {
+        log.warn("페이지 {} 마이그레이션 롤백 시작", pageId);
 
         try {
-            // EntityManager 생성
-            try (var entityManager = shardAwareRepository.getEntityManager(targetShard)) {
+            String targetShard = shardService.determineTargetShard(pageId);
 
-                // 페이지 저장
-                shardAwareRepository.savePageToShard(targetShard, page, entityManager);
-
-                // 블록들 저장
-                for (Block block : blocks) {
-                    shardAwareRepository.saveBlockToShard(targetShard, block, entityManager);
+            // 1. 대상 샤드에서 복제된 데이터 삭제
+            if (!LEGACY_SHARD_KEY.equals(targetShard)) {
+                if ("shard1".equals(targetShard)) {
+                    migrationTransactionService.rollbackShard1Data(pageId); // 프록시 호출
+                } else if ("shard2".equals(targetShard)) {
+                    migrationTransactionService.rollbackShard2Data(pageId); // 프록시 호출
                 }
-
-                // 권한들 저장
-                for (PagePermission permission : permissions) {
-                    shardAwareRepository.savePagePermissionToShard(targetShard, permission, entityManager);
-                }
-
-                // 배치 처리를 위한 flush
-                shardAwareRepository.flushAndClearShard(targetShard, entityManager);
             }
 
-            // 트랜잭션 커밋
-            targetTxManager.commit(targetTxStatus);
+            // 2. Legacy에서 상태를 READY로 복원
+            migrationTransactionService.rollbackLegacyStatus(pageId);// 프록시 호출
 
         } catch (Exception e) {
-            // 오류 발생 시 롤백
-            targetTxManager.rollback(targetTxStatus);
-            throw new RuntimeException("대상 샤드 " + targetShard + "에 데이터 저장 실패", e);
+            log.error("페이지 {} 마이그레이션 롤백 중 오류 발생", pageId, e);
         }
-    }
-
-
-    /**
-     * 페이지 마이그레이션 상태 업데이트
-     */
-    private void updatePageMigrationStatus(UUID pageId, MigrationStatus status) {
-        int updated = pageRepository.updateMigrationStatus(pageId, status);
-        if (updated == 0) {
-            throw new RuntimeException("페이지 " + pageId + " 마이그레이션 상태 업데이트 실패");
-        }
-    }
-
-    /**
-     * 페이지 관련 모든 데이터의 마이그레이션 상태 업데이트
-     */
-    private void updateAllMigrationStatus(UUID pageId, MigrationStatus status) {
-        updatePageMigrationStatus(pageId, status);
-        blockRepository.updateMigrationStatusByPageId(pageId, status);
-        pagePermissionRepository.updateMigrationStatusByPageId(pageId, status);
-    }
-
-    /**
-     * 마이그레이션 대상 페이지 수 조회
-     */
-    private long countPagesForMigration() {
-        return pageRepository.findPagesByMigrationStatus(
-                MigrationStatus.READY, Pageable.unpaged()).getTotalElements();
     }
 }

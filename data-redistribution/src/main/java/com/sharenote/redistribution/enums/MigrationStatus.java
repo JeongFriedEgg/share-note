@@ -8,7 +8,8 @@ import lombok.RequiredArgsConstructor;
 public enum MigrationStatus {
     READY("준비"),
     MIGRATING("마이그레이션 중"),
-    MIGRATED("마이그레이션 완료");
+    MIGRATED("마이그레이션 완료"),
+    FAILED("실패");
 
     private final String description;
 }
