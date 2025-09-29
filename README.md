@@ -200,6 +200,8 @@ cd data-redistribution/docker
 6. [데이터 무결성을 보장하기 위한 트리거(Trigger) 활용](https://velog.io/@jeongegg/%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%AC%B4%EA%B2%B0%EC%84%B1%EC%9D%84-%EB%B3%B4%EC%9E%A5%ED%95%98%EA%B8%B0-%EC%9C%84%ED%95%9C-%ED%8A%B8%EB%A6%AC%EA%B1%B0Trigger-%ED%99%9C%EC%9A%A9)
 7. [샤딩(Sharding) 키 관리 전략 5가지](https://velog.io/@jeongegg/%EB%8D%B0%EC%9D%B4%ED%84%B0%EB%B2%A0%EC%9D%B4%EC%8A%A4-%EC%83%A4%EB%94%A9)
 
+
+
 ## 기술스택
 
 ```JAVA```
