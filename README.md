@@ -190,17 +190,6 @@ cd data-redistribution/docker
 - 해시기반 샤드키로 UUID를 사용하였을 때, UUID 생성 라이브러리에 의해 키를 랜덤하게 생성하고, 해시기반 샤드키로 샤딩을 하더라도 데이터가 거의 균등하게 분배되기 때문에 ```UUID를 해시기반 샤드키로 사용하는 것```이 ```✅ 보안적 측면```, ```✅ 균등한 분배``` 목적에서 적절함.
 
 
-# 💥 기술적 이슈
-
-1. [JWT 인증 방식에서 보안을 고려한 Access Token, Refresh Token 관리 방법](https://velog.io/@jeongegg/JWT-%EC%9D%B8%EC%A6%9D-%EB%B0%A9%EC%8B%9D%EC%97%90%EC%84%9C-%EB%B3%B4%EC%95%88%EC%9D%84-%EA%B3%A0%EB%A0%A4%ED%95%9C-Access-Token-Refresh-Token-%EA%B4%80%EB%A6%AC-%EB%B0%A9%EB%B2%95)
-2. [Spring MVC vs Spring WebFlux](https://velog.io/@jeongegg/Spring-MVC-vs-Spring-WebFlux)
-3. [Reactive Spring Security의 구조와 동작 및 구현[JWT 인증방식]](https://velog.io/@jeongegg/Reactive-Spring-Security%EC%9D%98-%EA%B5%AC%EC%A1%B0%EC%99%80-%EB%8F%99%EC%9E%91-%EB%B0%8F-%EA%B5%AC%ED%98%84JWT-%EC%9D%B8%EC%A6%9D%EB%B0%A9%EC%8B%9D)
-4. [복잡한 문서구조(노션) 어플리케이션 개발에서 DB로써 PostgreSQL의 적합성(vs MySQL, Neo4j)](https://velog.io/@jeongegg/%EB%B3%B5%EC%9E%A1%ED%95%9C-%EB%AC%B8%EC%84%9C%EA%B5%AC%EC%A1%B0%EB%85%B8%EC%85%98-%EC%96%B4%ED%94%8C%EB%A6%AC%EC%BC%80%EC%9D%B4%EC%85%98-%EA%B0%9C%EB%B0%9C%EC%97%90%EC%84%9C-PostgreSQL%EC%9D%98-%EC%A0%81%ED%95%A9%EC%84%B1-vs-MySQL-Neo4j)
-5. [개발자를 위한 PostgreSQL 심층 탐구: 성능, 확장성, 그리고 유연성](https://velog.io/@jeongegg/PostgreSQL-Deep-Dive)
-6. [데이터 무결성을 보장하기 위한 트리거(Trigger) 활용](https://velog.io/@jeongegg/%EB%8D%B0%EC%9D%B4%ED%84%B0-%EB%AC%B4%EA%B2%B0%EC%84%B1%EC%9D%84-%EB%B3%B4%EC%9E%A5%ED%95%98%EA%B8%B0-%EC%9C%84%ED%95%9C-%ED%8A%B8%EB%A6%AC%EA%B1%B0Trigger-%ED%99%9C%EC%9A%A9)
-7. [샤딩(Sharding) 키 관리 전략 5가지](https://velog.io/@jeongegg/%EB%8D%B0%EC%9D%B4%ED%84%B0%EB%B2%A0%EC%9D%B4%EC%8A%A4-%EC%83%A4%EB%94%A9)
-
-
 
 ## 기술스택
 
